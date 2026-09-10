@@ -40,3 +40,6 @@ Thumbs.db
 # Model weights
 *.pt
 *.pth
+
+# ONNX model weights (machine-local)
+models/*.onnx
