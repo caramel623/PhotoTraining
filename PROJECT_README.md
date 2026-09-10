@@ -25,7 +25,7 @@ Chinese). This file documents the **implemented** project.
 | **1** | Core + SQLite + GUI skeleton + Archive Manager + resumable pipeline | **Done** |
 | **2** | Image processing + vehicle/plate detection (YOLO, CPU/CUDA) + CUDA env detect/download (2.5) | **Done** |
 | **3** | OCR (PaddleOCR sidecar) + plate quality grading + plate grouping | **Done (2026-09-09; see PHASE3.md)** — bugs fixed + data requeued (2026-09-10; see PHASE3_WRAPUP.md) — sample run: 200 random images with real models, 200/200 OK (see PROGRESS.md §7) |
-| 4 | Manual review UI + merge/split + per-image labels | next |
+| **4** | Manual review UI + merge/split + per-image labels | **Done (2026-09-10; 19 Phase 4 tests, 111 total)** |
 | 5 | Dataset export (crops, plate-masked Re-ID crops, splits, pairs) | next |
 | 6 | Re-ID integration (embedding engine, AI02 hand-off) | next |
 

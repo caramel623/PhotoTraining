@@ -140,6 +140,7 @@ class ProcessingPage(QWidget):
         self.progress.setValue(1)
         self._set_running_ui()
         self.refresh()
+        self.refresh_requested.emit()
         if result is not None:
             QMessageBox.information(
                 self, "Processing",
@@ -150,4 +151,5 @@ class ProcessingPage(QWidget):
         self.progress.setRange(0, 1)
         self._set_running_ui()
         self.refresh()
+        self.refresh_requested.emit()
         QMessageBox.critical(self, "Processing error", message)

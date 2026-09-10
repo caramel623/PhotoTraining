@@ -397,6 +397,28 @@ class VehicleRepository:
         )
         return [dict(r) for r in rows]
 
+    def members_for_review(self, vehicle_id: str) -> list[dict]:
+        """Full per-member rows for the manual-review screen (one join).
+
+        Superset of :meth:`members_of`: adds ``vehicle_crop_path`` (for the
+        thumbnail), ``review_status`` and ``date`` so the Review GUI needs
+        no extra per-image lookups. Never writes to the database.
+        """
+        rows = self.db.query(
+            """
+            SELECT m.image_id, m.label_source, m.confidence,
+                   i.original_filename, i.source_path, i.vehicle_crop_path,
+                   i.camera_id, i.date, i.plate_text_normalized,
+                   i.review_status, i.processing_status
+            FROM vehicle_members m
+            JOIN images i ON i.image_id = m.image_id
+            WHERE m.vehicle_id=?
+            ORDER BY i.date, i.image_id
+            """,
+            (vehicle_id,),
+        )
+        return [dict(r) for r in rows]
+
     def vehicle_for_image(self, image_id: int) -> Optional[str]:
         row = self.db.query_one(
             "SELECT vehicle_id FROM vehicle_members WHERE image_id=?",

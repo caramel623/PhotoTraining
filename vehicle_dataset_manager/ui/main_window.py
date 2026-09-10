@@ -45,6 +45,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.settings_page, "Settings")
         self.tabs.addTab(self.logs_page, "Logs")
         self.tabs.addTab(self.project_page, "Project")
+        self.tabs.currentChanged.connect(self._refresh_visible_page)
 
         self.setCentralWidget(self.tabs)
 
@@ -55,6 +56,14 @@ class MainWindow(QMainWindow):
         # Cross-page refresh: when import/processing finishes, update the status.
         self.import_page.refresh_requested.connect(self._update_status)
         self.processing_page.refresh_requested.connect(self._update_status)
+        self.processing_page.refresh_requested.connect(self.review_page.refresh_groups)
+
+    def _refresh_visible_page(self, index: int) -> None:
+        page = self.tabs.widget(index)
+        if page is self.review_page:
+            self.review_page.refresh_groups()
+        elif page is self.vehicle_group_page:
+            self.vehicle_group_page.refresh()
 
     def _update_status(self, *_args) -> None:
         counts = self.ctx.images.counts()
@@ -69,6 +78,10 @@ class MainWindow(QMainWindow):
         try:
             if self.runner.is_running:
                 self.runner.stop()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self.ctx.close()
         except Exception:  # noqa: BLE001
             pass
         try:

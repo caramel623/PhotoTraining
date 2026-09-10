@@ -8,7 +8,7 @@
 ## 0. 一頁總覽（TL;DR）
 - 專案：Windows 本地「車輛影像資料集建立＋手動標註」工具（Vehicle Re-ID）。全本地、無雲端、**不修改原始檔**。
 - 已完成：Phase 1（架構/DB/巢狀匯入/INI）、Phase 2（YOLO 車輛偵測＋車輛裁切，CPU/CUDA）、Phase 2.5（選用 CUDA 時偵測環境並下載依賴）、**Phase 3（PaddleOCR 車牌 OCR sidecar＋品質分級＋分組）**。
-- 下一步：Phase 4（手動審核 GUI：縮圖格、Enter/N/U/E/M/S、merge/split）。
+- 下一步：Phase 5（資料集輸出：裁切、車牌遮罩、切分與正負配對）。
 - 測試：**92 全綠**（88 舊＋4 run_sample 抽樣）。本機為 AMD（無 CUDA）→ 於 CPU 開發；完成後移到 NVIDIA 機器，「設定→Use CUDA」即可啟用（需先裝 CUDA 版 torch，程式內可一鍵下載）。
 - **新增 sidecar venv**：`.venv-ocr`（Python 3.13，paddlepaddle 3.3.1＋paddleocr 3.7.0）；主程式（Python 3.14）以 JSON lines 通訊。正式機器需重建（`py -3.13 -m venv .venv-ocr`＋`pip install paddlepaddle paddleocr`），「設定→OCR→Detect」可查狀態。
 
@@ -150,6 +150,6 @@ $content = @'  <檔案內容>  '@                     # 單引號 here-string（
 - ✅ **Phase 3：PaddleOCR 車牌 OCR（sidecar）＋品質分級＋分組（2026-09-09 完成，詳見 `PHASE3.md`）**。
 - ✅ **Phase 3 收尾：2026-09-10 完成（3+1 bug 修復、88 測試全綠、stub 跑的 9061 張回 pending、label_priority 回填；詳見 `PHASE3_WRAPUP.md`）**。
 - ✅ **2026-09-10 樣本驗證：隨機抽 200 張真實模型處理（200/200 成功、165 有牌／35 NO_PLATE、0 失敗）；新增 `ProcessingEngine.run_sample()`＋`scripts/run_sample.py`（seed 可重現）；92 測試全綠；詳見 `PROGRESS.md` 第七節**。
-- ⬜ Phase 4：手動審核 GUI（縮圖格、Enter/N/U/E/M/S、merge/split）（**下一站**）。
-- ⬜ Phase 5：資料集輸出（README §17 結構、§16 遮車牌 Re-ID crop、§18 正負對、§19 時間/鏡頭切分）。
+- ✅ **Phase 4：手動審核 GUI（縮圖格、狀態色碼、快捷鍵、車牌編輯、merge/split；2026-09-10 完成）**。
+- ⬜ Phase 5：資料集輸出（README §17 結構、§16 遮車牌 Re-ID crop、§18 正負對、§19 時間/鏡頭切分）（**下一站**）。
 - ⬜ Phase 6：Re-ID embedding＋AI02（Ubuntu RTX A5000）交付。

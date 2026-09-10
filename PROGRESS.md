@@ -158,3 +158,15 @@ $env:OCR_ENGINE="paddle"; $env:OCR_PRESET="mobile"
 ### 驗證
 - 新增 `tests/test_engine_sample.py`（4 項：抽樣張數、seed 可重現、count 超過可用數、stuck processing 自動回隊列）→ 全測試 **92 全綠**。
 - UI smoke OK。剩餘 8861 張仍可隨時用 `run_sample.py`（換 seed）或 `run_real.py process` 續跑。
+
+---
+
+## 八、2026-09-10 Phase 4 完成（人工複審 GUI）
+
+- 新增 Qt-free `ReviewModel`：群組摘要、逐圖狀態、修改車牌、群組確認、merge/split。
+- Review 頁完成群組清單、摘要、縮圖 Grid、群組/影像狀態篩選、狀態色碼與進度條。
+- 快捷鍵：Enter/Space/N/U/X/E/M/S；所有寫入經 repository，原始影像不變。
+- 縮圖由背景 thread pool 載入並在解碼時縮小，避免大型照片阻塞 GUI。
+- 處理完成或切換到 Review 分頁會自動刷新；程式關閉會釋放 PaddleOCR sidecar。
+- Phase 4 測試 **19 全綠**，全專案 pytest **111 全綠**，offscreen UI smoke 通過。
+- 本階段未執行新照片處理（0 張）；下一步為 Phase 5 Dataset Export。
