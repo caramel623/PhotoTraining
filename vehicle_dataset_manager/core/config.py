@@ -30,7 +30,8 @@ class ModelsConfig(BaseModel):
     vehicle_model: str = "yolov8s.pt"
     #: Confidence threshold for vehicle detections.
     vehicle_conf: float = Field(default=0.3, ge=0.0, le=1.0)
-    #: Plate slot: "none" (stub) or "paddle" (PaddleOCR full-image OCR filter).
+    #: Plate slot: "none" (stub), "onnx" (Taiwan plate region detector,
+    #: models/taiwan_plate_detector.onnx) or "paddle" (PaddleOCR full-image OCR filter).
     plate_detector: str = "none"
     #: OCR slot: "none" (stub) or "paddle" (PaddleOCR sidecar in .venv-ocr).
     ocr: str = "none"

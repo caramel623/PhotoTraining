@@ -26,6 +26,10 @@ from vehicle_dataset_manager.database.repositories import (
     VehicleRepository,
 )
 from vehicle_dataset_manager.detection.base import StubPlateDetector, StubVehicleDetector
+from vehicle_dataset_manager.detection.onnx_plate_detector import (
+    DEFAULT_MODEL_PATH as DEFAULT_PLATE_MODEL_PATH,
+    OnnxPlateDetector,
+)
 from vehicle_dataset_manager.detection.yolo_detector import build_vehicle_detector
 from vehicle_dataset_manager.ocr.base import StubOcr
 from vehicle_dataset_manager.ocr.paddle_client import (
@@ -93,6 +97,7 @@ class AppContext:
             self.settings, models_dir=self.workspace.models_dir
         )
         self._build_ocr()
+        self._build_plate()
 
     def _build_ocr(self) -> None:
         """Select the OCR/plate engines from settings.
@@ -104,8 +109,9 @@ class AppContext:
         """
         self.paddle_process = None
         slot = (self.settings.models.ocr or "none").lower()
-        if slot != "paddle":
-            log.debug("ocr slot=%r -> stub engines", slot)
+        plate_slot = (self.settings.models.plate_detector or "none").lower()
+        if slot != "paddle" and plate_slot != "paddle":
+            log.debug("ocr slot=%r, plate slot=%r -> stub engines", slot, plate_slot)
             return
         ocr_cfg = self.settings.ocr
         cache_dir = Path(ocr_cfg.cache_dir) if ocr_cfg.cache_dir else (
@@ -124,7 +130,7 @@ class AppContext:
                 request_timeout=ocr_cfg.request_timeout,
             )
             self.plate_detector = plate_det
-            self.ocr = ocr
+            self.ocr = ocr if slot == "paddle" else StubOcr()
             self.paddle_process = process
             log.info(
                 "paddle OCR enabled: preset=%s cache=%s python=%s",
@@ -135,6 +141,25 @@ class AppContext:
             self.plate_detector = StubPlateDetector()
             self.ocr = StubOcr()
             self.paddle_process = None
+
+    def _build_plate(self) -> None:
+        """Select the ONNX plate detector when the plate slot is ``onnx``.
+
+        Runs after :meth:`_build_ocr` so an explicit ``onnx`` choice wins
+        over the PaddleOCR-derived plate engine. On construction problems
+        (missing model file, onnxruntime not installed) the previously
+        built engine (paddle or stub) is kept.
+        """
+        if self.settings is None:
+            return
+        slot = (self.settings.models.plate_detector or "none").lower()
+        if slot != "onnx":
+            return
+        try:
+            self.plate_detector = OnnxPlateDetector()
+            log.info("plate detector: onnx (model=%s)", DEFAULT_PLATE_MODEL_PATH)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("failed to build onnx plate detector (%s); keeping previous engine", exc)
 
     def close(self) -> None:
         """Release non-DB resources (the PaddleOCR sidecar). Idempotent."""

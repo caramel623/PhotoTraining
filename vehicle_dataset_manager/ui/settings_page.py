@@ -149,13 +149,15 @@ class SettingsPage(QWidget):
         )
         self.model_vehicle_conf = QSpinBox()
         self.model_vehicle_conf.setRange(1, 100); self.model_vehicle_conf.setSuffix("%")
-        self.model_plate = QComboBox(); self.model_plate.addItems(["none", "paddle"])
+        self.model_plate = QComboBox(); self.model_plate.addItems(["none", "onnx", "paddle"])
+        self.plate_status = QLabel("-")
         self.model_ocr = QComboBox(); self.model_ocr.addItems(["none", "paddle"])
         self.model_reid = QComboBox(); self.model_reid.addItems(["none"])
         modf.addRow("Vehicle detector", self.model_vehicle)
         modf.addRow("Vehicle model (YOLO)", self.model_vehicle_model)
         modf.addRow("Vehicle confidence", self.model_vehicle_conf)
         modf.addRow("Plate detector", self.model_plate)
+        modf.addRow("Plate model status", self.plate_status)
         modf.addRow("OCR", self.model_ocr)
         modf.addRow("Re-ID", self.model_reid)
         root.addWidget(models)
@@ -196,6 +198,7 @@ class SettingsPage(QWidget):
         self.model_vehicle_model.setCurrentText(vm)
         self.model_vehicle_conf.setValue(int(round(s.models.vehicle_conf * 100)))
         self.model_plate.setCurrentText(s.models.plate_detector)
+        self._update_plate_status()
         self.model_ocr.setCurrentText(s.models.ocr)
         self.model_reid.setCurrentText(s.models.reid)
         if s.device.use_cuda:
@@ -225,7 +228,30 @@ class SettingsPage(QWidget):
         self.ctx.save_settings()
         self.ctx.build_detectors()
         self.device_info.setText(_device_status())
+        self._update_plate_status()
         QMessageBox.information(self, "Settings", "Saved.")
+
+    def _update_plate_status(self) -> None:
+        """Report ONNX plate model availability for the onnx slot."""
+        if self.model_plate.currentText() != "onnx":
+            self.plate_status.setText("-")
+            return
+        from vehicle_dataset_manager.detection.onnx_plate_detector import (
+            DEFAULT_MODEL_PATH,
+        )
+
+        if not DEFAULT_MODEL_PATH.is_file():
+            self.plate_status.setText("MISSING: " + str(DEFAULT_MODEL_PATH))
+            self.plate_status.setStyleSheet("color: #b35900;")
+            return
+        try:
+            import onnxruntime  # noqa: F401
+
+            self.plate_status.setText("READY: " + str(DEFAULT_MODEL_PATH))
+            self.plate_status.setStyleSheet("color: #1a7f37;")
+        except ImportError:
+            self.plate_status.setText("onnxruntime not installed (pip install onnxruntime)")
+            self.plate_status.setStyleSheet("color: #b35900;")
 
     def _detect_ocr(self) -> None:
         from vehicle_dataset_manager.ocr.paddle_client import default_ocr_python
