@@ -152,7 +152,13 @@ class SettingsPage(QWidget):
         self.model_plate = QComboBox(); self.model_plate.addItems(["none", "onnx", "paddle"])
         self.plate_status = QLabel("-")
         self.model_ocr = QComboBox(); self.model_ocr.addItems(["none", "paddle"])
-        self.model_reid = QComboBox(); self.model_reid.addItems(["none"])
+        self.model_reid = QComboBox(); self.model_reid.addItems(["none", "onnx"])
+        self.reid_model_path = QLineEdit()
+        self.reid_model_path.setPlaceholderText(
+            "<workspace>/models/reid.onnx"
+        )
+        self.reid_input_width = QSpinBox(); self.reid_input_width.setRange(1, 4096)
+        self.reid_input_height = QSpinBox(); self.reid_input_height.setRange(1, 4096)
         modf.addRow("Vehicle detector", self.model_vehicle)
         modf.addRow("Vehicle model (YOLO)", self.model_vehicle_model)
         modf.addRow("Vehicle confidence", self.model_vehicle_conf)
@@ -160,6 +166,9 @@ class SettingsPage(QWidget):
         modf.addRow("Plate model status", self.plate_status)
         modf.addRow("OCR", self.model_ocr)
         modf.addRow("Re-ID", self.model_reid)
+        modf.addRow("Re-ID ONNX model", self.reid_model_path)
+        modf.addRow("Re-ID input width", self.reid_input_width)
+        modf.addRow("Re-ID input height", self.reid_input_height)
         root.addWidget(models)
 
         root.addStretch(1)
@@ -201,6 +210,9 @@ class SettingsPage(QWidget):
         self._update_plate_status()
         self.model_ocr.setCurrentText(s.models.ocr)
         self.model_reid.setCurrentText(s.models.reid)
+        self.reid_model_path.setText(s.reid.model_path or "")
+        self.reid_input_width.setValue(s.reid.input_width)
+        self.reid_input_height.setValue(s.reid.input_height)
         if s.device.use_cuda:
             self._detect()
 
@@ -225,6 +237,9 @@ class SettingsPage(QWidget):
         s.models.plate_detector = self.model_plate.currentText()
         s.models.ocr = self.model_ocr.currentText()
         s.models.reid = self.model_reid.currentText()
+        s.reid.model_path = self.reid_model_path.text().strip() or None
+        s.reid.input_width = self.reid_input_width.value()
+        s.reid.input_height = self.reid_input_height.value()
         self.ctx.save_settings()
         self.ctx.build_detectors()
         self.device_info.setText(_device_status())

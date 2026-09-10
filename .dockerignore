@@ -1,0 +1,10 @@
+*
+!.dockerignore
+!ai02/
+!ai02/**
+!scripts/
+!scripts/build_reid_index.py
+!vehicle_dataset_manager/
+!vehicle_dataset_manager/**
+**/__pycache__/
+**/*.pyc

@@ -8,8 +8,8 @@
 ## 0. 一頁總覽（TL;DR）
 - 專案：Windows 本地「車輛影像資料集建立＋手動標註」工具（Vehicle Re-ID）。全本地、無雲端、**不修改原始檔**。
 - 已完成：Phase 1（架構/DB/巢狀匯入/INI）、Phase 2（YOLO 車輛偵測＋車輛裁切，CPU/CUDA）、Phase 2.5（選用 CUDA 時偵測環境並下載依賴）、**Phase 3（PaddleOCR 車牌 OCR sidecar＋品質分級＋分組）**。
-- 下一步：Phase 6（Re-ID embedding＋AI02 Ubuntu RTX A5000 交付）。
-- 測試：**132 全綠**。本機為 AMD（無 CUDA）→ 於 CPU 開發；完成後移到 NVIDIA 機器，「設定→Use CUDA」即可啟用（需先裝 CUDA 版 torch，程式內可一鍵下載）。
+- 下一步：將 P6 容器與 ONNX 模型部署到 AI02，實機驗證 RTX A5000 CUDA provider 與 FAISS。
+- 測試：**146 全綠**。P6 本機整合完成；AI02 A5000 實機仍待部署驗證。
 - **新增 sidecar venv**：`.venv-ocr`（Python 3.13，paddlepaddle 3.3.1＋paddleocr 3.7.0）；主程式（Python 3.14）以 JSON lines 通訊。正式機器需重建（`py -3.13 -m venv .venv-ocr`＋`pip install paddlepaddle paddleocr`），「設定→OCR→Detect」可查狀態。
 
 ## 1. 本次（Phase 2.5）做了什麼
@@ -152,4 +152,4 @@ $content = @'  <檔案內容>  '@                     # 單引號 here-string（
 - ✅ **2026-09-10 樣本驗證：隨機抽 200 張真實模型處理（200/200 成功、165 有牌／35 NO_PLATE、0 失敗）；新增 `ProcessingEngine.run_sample()`＋`scripts/run_sample.py`（seed 可重現）；92 測試全綠；詳見 `PROGRESS.md` 第七節**。
 - ✅ **Phase 4：手動審核 GUI（縮圖格、狀態色碼、快捷鍵、車牌編輯、merge/split；2026-09-10 完成）**。
 - ✅ **Phase 5：資料集輸出（完整目錄、車牌遮罩 Re-ID crop、group/time/camera 切分、正負對與 triplet、可取消續跑；2026-09-10 完成，詳見 `PHASE5.md`）**。
-- ⬜ Phase 6：Re-ID embedding＋AI02（Ubuntu RTX A5000）交付（**下一站**）。
+- 🟨 **Phase 6：ONNX embedding、portable cosine index、GUI／CLI、AI02 Docker 與 FAISS 交接已完成；等待 AI02 RTX A5000 實機與正式模型驗證（詳見 `PHASE6.md`）**。

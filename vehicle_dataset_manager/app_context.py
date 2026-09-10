@@ -39,6 +39,7 @@ from vehicle_dataset_manager.ocr.paddle_client import (
 from vehicle_dataset_manager.ocr.paddle_protocol import preset_models
 from vehicle_dataset_manager.pipeline.engine import ProcessingEngine
 from vehicle_dataset_manager.pipeline.stages import build_default_stages
+from vehicle_dataset_manager.reid import OnnxReIDEngine, PreprocessConfig, StubReID
 from vehicle_dataset_manager.services.import_service import ImportService
 
 log = logging.getLogger("vdm.app")
@@ -64,6 +65,7 @@ class AppContext:
     vehicle_detector: object = StubVehicleDetector()
     plate_detector: object = StubPlateDetector()
     ocr: object = StubOcr()
+    reid: object = StubReID()
     #: Shared PaddleOCR sidecar process (None when the stub OCR is in use).
     paddle_process: Optional[PaddleOcrProcess] = None
 
@@ -98,6 +100,31 @@ class AppContext:
         )
         self._build_ocr()
         self._build_plate()
+        self._build_reid()
+
+    def _build_reid(self) -> None:
+        self.reid = StubReID()
+        slot = (self.settings.models.reid or "none").lower()
+        if slot != "onnx":
+            return
+        cfg = self.settings.reid
+        model_path = (
+            Path(cfg.model_path)
+            if cfg.model_path
+            else self.workspace.models_dir / "reid.onnx"
+        )
+        if not model_path.is_file():
+            log.warning("Re-ID model not found (%s); using stub", model_path)
+            return
+        self.reid = OnnxReIDEngine(
+            model_path,
+            use_cuda=self.settings.device.use_cuda,
+            preprocess=PreprocessConfig(
+                width=cfg.input_width,
+                height=cfg.input_height,
+            ),
+        )
+        log.info("Re-ID engine: onnx (model=%s)", model_path)
 
     def _build_ocr(self) -> None:
         """Select the OCR/plate engines from settings.

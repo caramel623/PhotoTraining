@@ -44,6 +44,11 @@ def test_export_page_defaults_to_safe_local_options(db, workspace):
     assert options.require_plate_bbox is True
     assert options.copy_originals is True
     assert str(workspace.exports_dir) in page.output_path.text()
+    assert page.btn_index.text() == "Build Re-ID Index"
+    page._set_running(True)
+    assert not page.btn_index.isEnabled()
+    page._set_running(False)
+    assert page.btn_index.isEnabled()
     page._preview()
     assert "Eligible: 0 / 0" in page.status_label.text()
     page.close()

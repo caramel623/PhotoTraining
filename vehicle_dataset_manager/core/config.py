@@ -87,6 +87,14 @@ class ExportConfig(BaseModel):
     image_quality: int = Field(default=90, ge=1, le=100)
 
 
+class ReIDConfig(BaseModel):
+    #: ONNX model path; None = <workspace>/models/reid.onnx.
+    model_path: Optional[str] = None
+    input_width: int = Field(default=256, ge=1, le=4096)
+    input_height: int = Field(default=256, ge=1, le=4096)
+    checkpoint_every: int = Field(default=100, ge=1)
+
+
 class AppSettings(BaseModel):
     paths: PathsConfig = Field(default_factory=PathsConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
@@ -95,6 +103,7 @@ class AppSettings(BaseModel):
     ocr: OcrConfig = Field(default_factory=OcrConfig)
     mask: MaskConfig = Field(default_factory=MaskConfig)
     export: ExportConfig = Field(default_factory=ExportConfig)
+    reid: ReIDConfig = Field(default_factory=ReIDConfig)
 
     # -- persistence -----------------------------------------------------
     @classmethod

@@ -91,7 +91,7 @@
 - ✅ **Phase 3（OCR，PaddleOCR + 車牌品質分級 + 分組）**：完成。
 - ✅ **Phase 4（人工稽核 GUI）**：完成。
 - ✅ **Phase 5（資料集輸出：遮罩裁切 / 正負配對 / 時間切分）**：完成。
-- ⬜ **Phase 6（Re-ID embedding + AI02 交接）**：未開始。
+- 🟨 **Phase 6（Re-ID embedding + AI02 交接）**：本機整合完成，AI02 實機驗證待辦。
 
 ---
 
@@ -186,3 +186,17 @@ $env:OCR_ENGINE="paddle"; $env:OCR_PRESET="mobile"
 - Phase 5 專項 **21 全綠**，全專案 pytest **132 全綠**，offscreen UI smoke 通過。
 - 本階段只使用合成影像測試；真實照片處理／匯出 **0 張**。
 - 詳細重跑與輸出格式見 `PHASE5.md`；下一步為 Phase 6。
+
+---
+
+## 十、2026-09-11 Phase 6 本機整合完成
+
+- ONNX Re-ID engine：可替換模型、CPU/CUDA provider、安全 fallback、L2-normalized embedding。
+- Portable cosine index：NPZ 無 pickle、metadata 與模型 identity、top-k／threshold／exclude 搜尋。
+- Dataset index builder：只讀 P5 `reid_crops`、路徑越界防護、checkpoint、取消續跑、Dataset 變更偵測。
+- Settings、AppContext、Dataset Export GUI 與 CLI wiring 完成。
+- AI02 交付：GPU Dockerfile、ONNX Runtime requirements、FAISS converter 與模型契約。
+- Docker context 採 allowlist，排除原始照片、workspace、DB、logs、cache 與模型。
+- P6 核心／wiring 14 項、相關 Export GUI 3 項；全專案 pytest **146/146**，UI smoke 通過。
+- 真實照片與正式模型執行：**0 張／0 個**。
+- 待辦：AI02 上選定與驅動相容的官方 CUDA/cuDNN image，放入正式 ONNX 模型，再驗證 CUDA provider、效能與 FAISS GPU。

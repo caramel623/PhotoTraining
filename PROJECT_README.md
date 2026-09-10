@@ -27,7 +27,7 @@ Chinese). This file documents the **implemented** project.
 | **3** | OCR (PaddleOCR sidecar) + plate quality grading + plate grouping | **Done (2026-09-09; see PHASE3.md)** — bugs fixed + data requeued (2026-09-10; see PHASE3_WRAPUP.md) — sample run: 200 random images with real models, 200/200 OK (see PROGRESS.md §7) |
 | **4** | Manual review UI + merge/split + per-image labels | **Done (2026-09-10; 19 Phase 4 tests, 111 total)** |
 | **5** | Dataset export (crops, plate-masked Re-ID crops, splits, pairs) | **Done (2026-09-10; 21 Phase 5 tests, 132 total)** |
-| 6 | Re-ID integration (embedding engine, AI02 hand-off) | next |
+| **6** | Re-ID integration (ONNX embedding, portable index, AI02 hand-off) | **Local integration done (2026-09-11; AI02 A5000 deployment pending)** |
 
 Phase 1–3 run end-to-end: import ZIP/7Z → extract → register images as PENDING →
 process (metadata, YOLO vehicle detect + crop, PaddleOCR plate OCR via a separate
@@ -50,7 +50,7 @@ vehicle_dataset_manager/
 ├── detection/              # BaseDetector + stubs + YOLO + cuda_env (Phase 2/2.5)
 ├── ocr/                    # BaseOcr + stub + PaddleOCR client/server (Phase 3)
 ├── exporting/              # safe dataset export, masks, splits, pairs (Phase 5)
-├── reid/                   # BaseReID + stub (Phase 6)
+├── reid/                   # ONNX Re-ID engine + portable similarity index
 ├── services/               # plate normalization, metadata parser, import
 ├── workers/                # QRunnable / QThreadPool primitives
 └── ui/                     # main window + 8 pages

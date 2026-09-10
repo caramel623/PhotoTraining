@@ -30,6 +30,7 @@ from vehicle_dataset_manager.exporting import (
     ExportResult,
     SplitSpec,
 )
+from vehicle_dataset_manager.reid import DatasetIndexBuilder, IndexBuildResult, StubReID
 
 
 class ExportPage(QWidget):
@@ -124,10 +125,12 @@ class ExportPage(QWidget):
         actions = QHBoxLayout()
         self.btn_preview = QPushButton("Preview Eligible Count")
         self.btn_export = QPushButton("Export Dataset")
+        self.btn_index = QPushButton("Build Re-ID Index")
         self.btn_cancel = QPushButton("Cancel")
         self.btn_cancel.setEnabled(False)
         actions.addWidget(self.btn_preview)
         actions.addWidget(self.btn_export)
+        actions.addWidget(self.btn_index)
         actions.addWidget(self.btn_cancel)
         actions.addStretch(1)
         self.status_label = QLabel("Ready.")
@@ -149,6 +152,7 @@ class ExportPage(QWidget):
         self.btn_browse.clicked.connect(self._browse)
         self.btn_preview.clicked.connect(self._preview)
         self.btn_export.clicked.connect(self._start_export)
+        self.btn_index.clicked.connect(self._start_index)
         self.btn_cancel.clicked.connect(self.runner.stop)
         self.split_strategy.currentIndexChanged.connect(self._update_split_fields)
 
@@ -239,6 +243,45 @@ class ExportPage(QWidget):
         signals.finished.connect(self._done)
         signals.error.connect(self._error)
 
+    def _start_index(self) -> None:
+        if self.runner.is_running:
+            QMessageBox.information(self, "Re-ID", "Another job is already running.")
+            return
+        root = Path(self.output_path.text().strip()).expanduser()
+        if not (root / "metadata" / "manifest.jsonl").is_file():
+            QMessageBox.warning(
+                self, "Re-ID", "Choose a completed Phase 5 dataset folder."
+            )
+            return
+        engine = getattr(self.ctx, "reid", None)
+        if engine is None or isinstance(engine, StubReID):
+            QMessageBox.information(
+                self,
+                "Re-ID",
+                "Configure an existing ONNX Re-ID model in Settings first.",
+            )
+            return
+        checkpoint_every = getattr(
+            getattr(self.ctx.settings, "reid", None), "checkpoint_every", 100
+        )
+
+        def do_index(progress_cb, should_cancel):
+            return DatasetIndexBuilder(
+                engine, checkpoint_every=checkpoint_every
+            ).build(
+                root,
+                on_progress=progress_cb,
+                should_cancel=should_cancel,
+            )
+
+        self.log.clear()
+        self.log.appendPlainText("Local Re-ID indexing started: " + str(root))
+        self._set_running(True)
+        signals = self.runner.start(do_index)
+        signals.progress.connect(self._progress)
+        signals.finished.connect(self._index_done)
+        signals.error.connect(self._error)
+
     def _progress(self, done: int, total: int, current: str) -> None:
         self.progress.setRange(0, max(total, 1))
         self.progress.setValue(done)
@@ -269,9 +312,26 @@ class ExportPage(QWidget):
         self.log.appendPlainText("ERROR: " + message)
         QMessageBox.critical(self, "Export failed", message)
 
+    def _index_done(self, result) -> None:
+        self._set_running(False)
+        if not isinstance(result, IndexBuildResult):
+            self.status_label.setText("Re-ID indexing stopped.")
+            return
+        state = "Cancelled; resumable" if result.cancelled else "Complete"
+        self.status_label.setText(
+            f"{state}: indexed={result.indexed}, reused={result.reused}, "
+            f"failed={result.failed}"
+        )
+        self.log.appendPlainText(
+            f"{state}\nIndexed: {result.indexed}/{result.total}\n"
+            f"Reused: {result.reused}\nFailed: {result.failed}\n"
+            f"Index: {result.index_path}"
+        )
+
     def _set_running(self, running: bool) -> None:
         self.btn_preview.setEnabled(not running)
         self.btn_export.setEnabled(not running)
+        self.btn_index.setEnabled(not running)
         self.btn_cancel.setEnabled(running)
 
     def _update_split_fields(self, *_args) -> None:
