@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vehicle-dataset-manager"
+version = "0.1.0"
+description = "Windows local vehicle image dataset builder & manual annotation tool for Vehicle Re-ID"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "CPTR" }]
+dependencies = [
+  "PySide6>=6.6,<7",
+  "opencv-python-headless>=4.8,<6",
+  "numpy>=1.26",
+  "Pillow>=10.0",
+  "py7zr>=1.0",
+  "pydantic>=2.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+vehicle-dataset-manager = "vehicle_dataset_manager.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vehicle_dataset_manager*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "integration: tests that load a real model / real data (slower)",
+]

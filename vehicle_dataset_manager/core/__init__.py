@@ -1,0 +1,1 @@
+"""Core building blocks: enums, workspace paths, settings, logging."""

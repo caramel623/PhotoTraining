@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+.venv-ocr/
+venv/
+
+# Local caches (models/OCR)
+.cache/
+Ultralytics/
+paddlex_cache/
+paddlex_home/
+
+# Workspace with photos, crops, DB (machine-local, never commit)
+runs/
+workspace/
+
+# Archives (photos) - keep out of git
+*.7z
+*.zip
+*.rar
+
+# Databases & logs
+*.db
+*.db-wal
+*.db-shm
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+# Model weights
+*.pt
+*.pth
