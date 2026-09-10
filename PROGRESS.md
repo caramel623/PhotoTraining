@@ -87,10 +87,10 @@
 ## 三、做到哪裡（Phase 狀態）
 
 - ✅ **Phase 1（架構 + 管線 + DB + 巢狀匯入 + INI 元數據）**：完成並用真實資料驗證。
-- ⬜ **Phase 2（真實車輛/車牌偵測，Ultralytics YOLO）**：未開始。
-- ⬜ **Phase 3（OCR，PaddleOCR + 車牌品質分級 + 分組）**：未開始。
-- ⬜ **Phase 4（人工稽核 GUI）**：未開始。
-- ⬜ **Phase 5（資料集輸出：遮罩裁切 / 正負配對 / 時間切分）**：未開始。
+- ✅ **Phase 2（真實車輛/車牌偵測，Ultralytics YOLO）**：完成。
+- ✅ **Phase 3（OCR，PaddleOCR + 車牌品質分級 + 分組）**：完成。
+- ✅ **Phase 4（人工稽核 GUI）**：完成。
+- ✅ **Phase 5（資料集輸出：遮罩裁切 / 正負配對 / 時間切分）**：完成。
 - ⬜ **Phase 6（Re-ID embedding + AI02 交接）**：未開始。
 
 ---
@@ -170,3 +170,19 @@ $env:OCR_ENGINE="paddle"; $env:OCR_PRESET="mobile"
 - 處理完成或切換到 Review 分頁會自動刷新；程式關閉會釋放 PaddleOCR sidecar。
 - Phase 4 測試 **19 全綠**，全專案 pytest **111 全綠**，offscreen UI smoke 通過。
 - 本階段未執行新照片處理（0 張）；下一步為 Phase 5 Dataset Export。
+
+---
+
+## 九、2026-09-10 Phase 5 完成（Dataset Export）
+
+- 新增安全匯出核心：完整 portable 目錄、metadata/manifest、train/val/test、pairs、triplets。
+- Re-ID crop 會遮蔽車牌，支援 solid color／blur／inpaint；原圖只讀且輸出副本。
+- 安全預設只輸出 `human_verified`，並可排除缺少可靠 plate bbox 的影像。
+- group hash／時間／攝影機三種切分都以車輛群組為單位，避免同車跨集合洩漏。
+- 可取消、同設定續跑與增量重用；不同設定不允許寫入既有輸出目錄。
+- Export GUI 完成預覽、設定、背景執行、進度、取消與續跑。
+- DB schema 升至 v4，保存實際 vehicle crop bbox，避免車牌座標轉換錯誤。
+- 修正 `JobRunner.is_running` 使用不存在的 `QRunnable.isRunning()`，確保連續背景工作正常。
+- Phase 5 專項 **21 全綠**，全專案 pytest **132 全綠**，offscreen UI smoke 通過。
+- 本階段只使用合成影像測試；真實照片處理／匯出 **0 張**。
+- 詳細重跑與輸出格式見 `PHASE5.md`；下一步為 Phase 6。

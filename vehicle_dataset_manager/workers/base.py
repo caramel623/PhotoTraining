@@ -67,20 +67,27 @@ class JobRunner:
         self.pool = QThreadPool.globalInstance()
         self.pool.setMaxThreadCount(max_workers)
         self._worker: Optional[Worker] = None
+        self._running = False
         self.signals: Optional[WorkerSignals] = None
 
     @property
     def is_running(self) -> bool:
-        return self._worker is not None and self._worker.isRunning()
+        return self._running
 
     def start(self, fn: Callable, *args: Any) -> WorkerSignals:
         if self.is_running:
             raise RuntimeError("a job is already running")
         self._worker = Worker(fn, *args)
         self.signals = self._worker.signals
+        self.signals.finished.connect(self._job_finished)
+        self.signals.error.connect(self._job_finished)
+        self._running = True
         self.pool.start(self._worker)
         return self.signals
 
     def stop(self) -> None:
         if self._worker is not None:
             self._worker.cancel_flag[0] = True
+
+    def _job_finished(self, *_args: Any) -> None:
+        self._running = False

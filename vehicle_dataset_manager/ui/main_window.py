@@ -32,7 +32,7 @@ class MainWindow(QMainWindow):
         self.processing_page = ProcessingPage(ctx, runner)
         self.review_page = ReviewPage(ctx)
         self.vehicle_group_page = VehicleGroupPage(ctx)
-        self.export_page = ExportPage(ctx)
+        self.export_page = ExportPage(ctx, runner)
         self.settings_page = SettingsPage(ctx)
         self.logs_page = LogsPage(ctx)
         self.project_page = ProjectPage(ctx)

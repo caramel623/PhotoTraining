@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 
-_CURRENT_VERSION = 3
+_CURRENT_VERSION = 4
 
 #: Ordered migrations. Each entry is a list of SQL statements.
 _MIGRATIONS: list[list[str]] = [
@@ -185,6 +185,9 @@ _MIGRATIONS: list[list[str]] = [
     ],
     [
         "ALTER TABLE images ADD COLUMN vehicle_crop_path TEXT",
+    ],
+    [
+        "ALTER TABLE images ADD COLUMN vehicle_crop_bbox TEXT",
     ],
 ]
 

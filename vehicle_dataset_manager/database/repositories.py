@@ -209,13 +209,16 @@ class ImageRepository:
             "vehicle_type", "speed", "direction", "speed_limit", "location",
             "device_serial", "sha256", "perceptual_hash",
             "width", "height", "error", "vehicle_crop_path",
+            "vehicle_crop_bbox",
         }
         cols = []
         vals: list[Any] = []
         for key, value in fields.items():
             if key not in allowed:
                 continue
-            if key in ("quality_flags", "vehicle_bbox", "plate_bbox") and not isinstance(value, str):
+            if key in (
+                "quality_flags", "vehicle_bbox", "plate_bbox", "vehicle_crop_bbox"
+            ) and not isinstance(value, str):
                 value = _dumps(value)
             cols.append(f"{key}=?")
             vals.append(value)
@@ -760,6 +763,47 @@ class DuplicateRepository:
 class ExportRepository:
     def __init__(self, db: Database) -> None:
         self.db = db
+
+    def list_candidates(self, label_priorities: Iterable[str]) -> list[dict]:
+        """Return completed, grouped rows eligible for local dataset export."""
+        priorities = [str(value) for value in label_priorities]
+        if not priorities:
+            return []
+        placeholders = ",".join("?" for _ in priorities)
+        rows = self.db.query(
+            f"""
+            SELECT i.image_id, i.original_filename, i.original_archive,
+                   i.archive_year, i.source_path, i.camera_id,
+                   i.captured_datetime, i.date, i.time, i.vehicle_type,
+                   i.speed, i.direction, i.plate_text_raw,
+                   i.plate_text_normalized, i.plate_confidence,
+                   i.vehicle_bbox, i.vehicle_crop_bbox, i.plate_bbox,
+                   i.review_status, i.quality_flags, i.sha256,
+                   i.width, i.height, i.vehicle_crop_path, i.updated_at,
+                   m.vehicle_id, m.label_source,
+                   m.confidence AS member_confidence,
+                   v.plate_normalized AS group_plate_normalized,
+                   v.verification, v.source AS group_source,
+                   COALESCE(v.label_priority, 'automatic_candidate') AS label_priority
+            FROM vehicle_members m
+            JOIN images i ON i.image_id = m.image_id
+            JOIN vehicles v ON v.vehicle_id = m.vehicle_id
+            WHERE i.processing_status = 'completed'
+              AND i.vehicle_crop_path IS NOT NULL
+              AND COALESCE(v.label_priority, 'automatic_candidate')
+                  IN ({placeholders})
+            ORDER BY m.vehicle_id, i.date, i.image_id
+            """,
+            priorities,
+        )
+        return [dict(row) for row in rows]
+
+    def list_exports(self, limit: int = 100) -> list[dict]:
+        rows = self.db.query(
+            "SELECT * FROM dataset_exports ORDER BY export_id DESC LIMIT ?",
+            (limit,),
+        )
+        return [dict(row) for row in rows]
 
     def record(
         self,

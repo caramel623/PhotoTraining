@@ -58,6 +58,7 @@ class PipelineContext:
     ocr_quality: OcrQuality = OcrQuality.UNKNOWN
     vehicle_group_id: Optional[str] = None
     vehicle_crop_path: Optional[str] = None
+    vehicle_crop_bbox: Optional[dict] = None
     primary_vehicle: Optional[Detection] = None
     quality_flags: List[str] = field(default_factory=list)
 
@@ -232,6 +233,9 @@ class VehicleCropStage(Stage):
                 saved.append(str(out))
                 if i == 0:
                     ctx.primary_vehicle = det
+                    ctx.vehicle_crop_bbox = {
+                        "x1": x1, "y1": y1, "x2": x2, "y2": y2
+                    }
         if saved:
             ctx.vehicle_crop_path = saved[0]
 

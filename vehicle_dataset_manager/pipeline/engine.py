@@ -239,6 +239,8 @@ class ProcessingEngine:
             fields["vehicle_bbox"] = [d.bbox_dict for d in ctx.vehicle_dets]
         if ctx.vehicle_crop_path:
             fields["vehicle_crop_path"] = ctx.vehicle_crop_path
+        if ctx.vehicle_crop_bbox:
+            fields["vehicle_crop_bbox"] = ctx.vehicle_crop_bbox
         if ctx.plate_bbox:
             fields["plate_bbox"] = ctx.plate_bbox
         if ctx.plate_raw is not None:

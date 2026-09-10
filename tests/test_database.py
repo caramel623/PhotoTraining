@@ -8,7 +8,9 @@ from vehicle_dataset_manager.core.enums import GroupVerification, JobState, Revi
 
 
 def test_schema_migrated(db):
-    assert db.migrate() >= 1
+    assert db.migrate() == 4
+    columns = {row["name"] for row in db.query("PRAGMA table_info(images)")}
+    assert "vehicle_crop_bbox" in columns
 
 
 def test_image_dedup(db):

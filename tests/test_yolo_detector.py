@@ -102,6 +102,7 @@ def test_vehicle_crop_stage_writes_new_file(tmp_path):
     crops = tmp_path / "crops"
     VehicleCropStage(crops).run(ctx)
     assert ctx.vehicle_crop_path is not None
+    assert ctx.vehicle_crop_bbox == {"x1": 46, "y1": 36, "x2": 154, "y2": 124}
     out_path = Path(ctx.vehicle_crop_path)
     assert out_path.exists()
     # bbox (50,40,150,120) + margin 4 -> x 46..154, y 36..124 -> 108x88
