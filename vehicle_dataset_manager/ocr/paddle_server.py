@@ -110,10 +110,10 @@ class Engine:
         return out
 
 
-def _selftest() -> int:
+def _selftest(preset: str = DEFAULT_PRESET) -> int:
     """Build the default (mobile) engine and exit 0/1. For manual smoke runs
     and the future settings-page 'detect' button (G5)."""
-    det_model, rec_model = preset_models(DEFAULT_PRESET)
+    det_model, rec_model = preset_models(preset)
     _log(f"selftest: building engine det={det_model} rec={rec_model}")
     t0 = time.time()
     try:
@@ -133,10 +133,11 @@ def _selftest() -> int:
 def main(argv: Optional[list] = None) -> int:
     parser = argparse.ArgumentParser(prog="paddle_server")
     parser.add_argument("--selftest", action="store_true", help="build engine, print status, exit")
+    parser.add_argument("--preset", default=DEFAULT_PRESET, choices=("mobile", "server"))
     args = parser.parse_args(argv)
 
     if args.selftest:
-        return _selftest()
+        return _selftest(args.preset)
 
     # Protocol writes go to the ORIGINAL stdout buffer (bytes, UTF-8);
     # everything else (paddle, warnings, prints) is rerouted to stderr.

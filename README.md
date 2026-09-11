@@ -860,6 +860,7 @@ Models
 - detector model
 - OCR model
 - Re-ID model
+- Windows 發行包內含 Campus_Violation_Helper 的台灣車牌 ONNX 偵測權重與 CC BY 4.0 授權文件
 
 Processing
 - batch size
@@ -868,6 +869,8 @@ Processing
 
 OCR
 - plate confidence threshold
+- 一鍵安裝 Python 3.13 PaddleOCR sidecar、套件與所選 OCR 模型
+- 安裝進度與逐項成功／失敗狀態
 
 Mask
 - mask method

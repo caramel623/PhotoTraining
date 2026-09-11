@@ -183,3 +183,16 @@ $content = @'  <檔案內容>  '@                     # 單引號 here-string（
 - 設定頁不再顯示不可執行的 EXE 指令，安裝成功後明確要求重新啟動。
 - 本機僅做離線模擬與封裝測試；A5000 實際下載與 CUDA 可用性仍需在目標機驗證。
 - 本次沒有讀取或處理真實照片（**0 張**）。
+
+## 15. 2026-09-12 v0.0.5 一鍵安裝 OCR 依賴與模型
+
+- 設定頁新增「下載／安裝所有必要依賴與 OCR 模型」及獨立進度日誌。
+- 若缺少 Python 3.13，使用 winget 的 Python.Python.3.13 使用者層級套件安裝。
+- 建立程式旁 .venv-ocr，安裝 paddlepaddle 3.3.1、paddleocr 3.7.0、paddlex 3.7.2。
+- 依設定的 mobile／server 預設執行 sidecar selftest，下載並驗證 OCR 模型。
+- 封裝版附帶 sidecar 所需 Python 原始碼，外部 Python 3.13 可直接啟動。
+- OCR 成功後自動選擇 PaddleOCR，並自動選用發行包內的 ONNX 車牌偵測器。
+- NVIDIA 主機接續安裝 CUDA runtime；無 NVIDIA 時安全略過並保留 CPU。
+- Campus 台灣車牌 ONNX 權重由授權工作區於建置時核對 SHA256 後加入發行包，不提交 Git。
+- Re-ID 權重仍由使用者自行提供。
+- 本機測試不下載模型、不處理真實照片（**0 張**）；目標機需完成線上安裝驗證。

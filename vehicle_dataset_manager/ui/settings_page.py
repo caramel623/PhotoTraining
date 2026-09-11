@@ -62,6 +62,60 @@ _STATUS_LABELS = {
 }
 
 
+def _install_all_dependencies(cache_dir, preset: str, cuda_index: str, line_cb):
+    from vehicle_dataset_manager.ocr.installer import install_ocr_runtime
+    from vehicle_dataset_manager.detection.onnx_plate_detector import DEFAULT_MODEL_PATH
+
+    line_cb("=== 台灣車牌偵測模型 ===")
+    if not DEFAULT_MODEL_PATH.is_file():
+        return {
+            "success": False,
+            "returncode": 4,
+            "message": "缺少 Campus_Violation_Helper 的台灣車牌 ONNX 模型。",
+            "ocr_python": "",
+            "cuda_installed": False,
+        }
+    line_cb("車牌偵測模型：" + str(DEFAULT_MODEL_PATH))
+
+    line_cb("=== PaddleOCR 依賴與模型 ===")
+    ocr_result = install_ocr_runtime(cache_dir, preset=preset, line_cb=line_cb)
+    if not ocr_result.success:
+        return {
+            "success": False,
+            "returncode": ocr_result.returncode,
+            "message": ocr_result.message,
+            "ocr_python": ocr_result.python_path,
+            "cuda_installed": False,
+        }
+    line_cb("=== CUDA（僅 NVIDIA 需要）===")
+    report = cuda_env.detect_environment(cuda_index)
+    cuda_installed = False
+    if report.status in (CudaStatus.TORCH_CPU_BUILD, CudaStatus.NO_TORCH) and report.nvidia.found:
+        cuda_result = cuda_env.install_cuda_torch(cuda_index, line_cb=line_cb)
+        if not cuda_result.success:
+            return {
+                "success": False,
+                "returncode": cuda_result.returncode,
+                "message": "OCR 已完成，但 CUDA runtime 安裝失敗。",
+                "ocr_python": ocr_result.python_path,
+                "cuda_installed": False,
+            }
+        cuda_installed = True
+    elif report.status == CudaStatus.READY:
+        line_cb("CUDA 已可使用，略過安裝。")
+    elif not report.nvidia.found:
+        line_cb("未偵測到 NVIDIA GPU，保留 CPU 模式並略過 CUDA。")
+    else:
+        line_cb("CUDA 套件已存在，但目前不可用；請檢查驅動與 CUDA 相容性。")
+    return {
+        "success": True,
+        "returncode": 0,
+        "message": "必要依賴與 OCR 模型已安裝完成。",
+        "ocr_python": ocr_result.python_path,
+        "cuda_installed": cuda_installed,
+    }
+
+
 class SettingsPage(QWidget):
     def __init__(self, ctx: AppContext) -> None:
         super().__init__()
@@ -84,6 +138,28 @@ class SettingsPage(QWidget):
         content_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         self.scroll_area.setWidget(scroll_content)
         root.addWidget(self.scroll_area, 1)
+
+        dependencies = QGroupBox("依賴與模型")
+        dep_layout = QVBoxLayout(dependencies)
+        dep_note = QLabel(
+            "內含 Campus 台灣車牌 ONNX 模型；一鍵安裝 PaddleOCR 的 Python 3.13 環境、套件與所選 OCR 模型；"
+            "偵測到 NVIDIA GPU 時也會安裝 CUDA runtime。"
+        )
+        dep_note.setWordWrap(True)
+        dep_layout.addWidget(dep_note)
+        dep_row = QHBoxLayout()
+        self.btn_install_all = QPushButton("下載／安裝所有必要依賴與 OCR 模型")
+        self.dependency_status = QLabel("尚未安裝或檢查。")
+        self.dependency_status.setWordWrap(True)
+        dep_row.addWidget(self.btn_install_all)
+        dep_row.addWidget(self.dependency_status, 1)
+        dep_layout.addLayout(dep_row)
+        self.dependency_log = QPlainTextEdit()
+        self.dependency_log.setReadOnly(True)
+        self.dependency_log.setFixedHeight(150)
+        self.dependency_log.setPlaceholderText("依賴、模型下載與安裝進度將顯示於此。")
+        dep_layout.addWidget(self.dependency_log)
+        content_layout.addWidget(dependencies)
 
         paths = QGroupBox("路徑")
         pf = QFormLayout(paths)
@@ -208,6 +284,7 @@ class SettingsPage(QWidget):
         self.btn_detect.clicked.connect(self._detect)
         self.btn_install.clicked.connect(self._install)
         self.btn_ocr_detect.clicked.connect(self._detect_ocr)
+        self.btn_install_all.clicked.connect(self._install_all)
 
     def _load(self) -> None:
         s = self.ctx.settings
@@ -332,6 +409,7 @@ class SettingsPage(QWidget):
     def _set_busy(self, busy: bool) -> None:
         self.btn_detect.setEnabled(not busy)
         self.btn_install.setEnabled(not busy)
+        self.btn_install_all.setEnabled(not busy)
 
     def _run_worker(self, kind: str, fn: Callable) -> None:
         if self._worker is not None and self._worker.isRunning():
@@ -339,7 +417,8 @@ class SettingsPage(QWidget):
         self._last_kind = kind
         self._set_busy(True)
         action = "環境偵測" if kind == "detect" else "安裝"
-        self.cuda_log.appendPlainText("-- 開始" + action + " --")
+        log_widget = self.dependency_log if kind == "all" else self.cuda_log
+        log_widget.appendPlainText("-- 開始" + action + " --")
         worker = _CudaWorker(fn)
         worker.line.connect(self._on_line)
         worker.done.connect(self._on_done)
@@ -353,14 +432,40 @@ class SettingsPage(QWidget):
         self._run_worker("install", lambda cb: cuda_env.install_cuda_torch(self._index(), line_cb=cb))
 
     def _on_line(self, line: str) -> None:
-        self.cuda_log.appendPlainText(line)
+        if self._last_kind == "all":
+            self.dependency_log.appendPlainText(line)
+        else:
+            self.cuda_log.appendPlainText(line)
+
+    def _install_all(self) -> None:
+        answer = QMessageBox.question(
+            self,
+            "安裝必要依賴與模型",
+            "這會連線下載 PaddleOCR、OCR 模型，並在缺少時透過 winget 安裝使用者層級 Python 3.13。\n"
+            "若偵測到 NVIDIA GPU，也會下載 CUDA 版 PyTorch。所需空間可能超過數 GB。\n\n是否繼續？",
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.dependency_log.clear()
+        self.dependency_status.setText("正在安裝，請勿關閉程式…")
+        cache_dir = self.ctx.workspace.cache_dir / "paddlex"
+        preset = str(self.ocr_preset.currentData() or "mobile")
+        cuda_index = self._index()
+        self._run_worker(
+            "all",
+            lambda cb: _install_all_dependencies(cache_dir, preset, cuda_index, cb),
+        )
 
     def _on_done(self, result: object) -> None:
         self._set_busy(False)
         kind = self._last_kind
         if isinstance(result, Exception):
-            self.cuda_log.appendPlainText("[錯誤] " + str(result))
-            self.device_info.setText("執行失敗：" + str(result))
+            log_widget = self.dependency_log if kind == "all" else self.cuda_log
+            log_widget.appendPlainText("[錯誤] " + str(result))
+            if kind == "all":
+                self.dependency_status.setText("安裝失敗：" + str(result))
+            else:
+                self.device_info.setText("執行失敗：" + str(result))
             return
         if kind == "detect" and isinstance(result, CudaEnvironmentReport):
             self._show_report(result)
@@ -376,6 +481,27 @@ class SettingsPage(QWidget):
                 if tail:
                     self.cuda_log.appendPlainText(tail)
                 self.device_info.setText("安裝失敗（回傳碼 " + str(code) + "）")
+        elif kind == "all" and isinstance(result, dict):
+            ok = bool(result.get("success"))
+            self.dependency_status.setText(str(result.get("message", "安裝完成" if ok else "安裝失敗")))
+            if ok:
+                ocr_index = self.model_ocr.findData("paddle")
+                if ocr_index >= 0:
+                    self.model_ocr.setCurrentIndex(ocr_index)
+                plate_index = self.model_plate.findData("onnx")
+                if plate_index >= 0:
+                    self.model_plate.setCurrentIndex(plate_index)
+                self.ctx.settings.models.ocr = "paddle"
+                self.ctx.settings.models.plate_detector = "onnx"
+                self.ctx.settings.ocr.ocr_python = str(result.get("ocr_python") or "") or None
+                self.ctx.save_settings()
+                self.ctx.build_detectors()
+                if result.get("cuda_installed"):
+                    self.dependency_status.setText("安裝完成；請重新啟動程式以啟用 CUDA。")
+            else:
+                self.dependency_log.appendPlainText(
+                    "[失敗] 回傳碼：" + str(result.get("returncode", -1))
+                )
 
     def _show_report(self, report: CudaEnvironmentReport) -> None:
         self.device_info.setText(_STATUS_LABELS.get(report.status, report.status.value))

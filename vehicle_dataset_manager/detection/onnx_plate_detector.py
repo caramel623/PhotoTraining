@@ -14,13 +14,15 @@ from pathlib import Path
 from typing import List, Union
 
 import numpy as np
+from vehicle_dataset_manager.core.portable_runtime import application_dir
 
 from vehicle_dataset_manager.detection.base import BaseDetector, Detection
 
 log = logging.getLogger("vdm.detection.onnx")
 
-#: Default model path relative to the project root.
-DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "taiwan_plate_detector.onnx"
+#: Default model path beside the source tree or packaged EXE.
+DEFAULT_MODEL_PATH = application_dir() / "models" / "taiwan_plate_detector.onnx"
+EXPECTED_MODEL_SHA256 = "E40B1ABEC9818430D9AA1EA522A65DEE79AE98A502F1B548CFC831B70FD16BE4"
 
 #: Input image size (letterboxed) expected by the ONNX model.
 INPUT_SIZE = 640

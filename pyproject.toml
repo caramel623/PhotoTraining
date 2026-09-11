@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vehicle-dataset-manager"
-version = "0.0.4"
+version = "0.0.5"
 description = "Windows local vehicle image dataset builder & manual annotation tool for Vehicle Re-ID"
 readme = "README.md"
 requires-python = ">=3.11"

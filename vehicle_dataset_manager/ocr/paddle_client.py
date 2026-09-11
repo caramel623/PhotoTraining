@@ -29,6 +29,7 @@ from typing import Callable, List, Optional
 import numpy as np
 
 from vehicle_dataset_manager.detection.base import BaseDetector, Detection
+from vehicle_dataset_manager.core.portable_runtime import application_dir, is_frozen_app
 from vehicle_dataset_manager.ocr.base import BaseOcr, OcrResult
 from vehicle_dataset_manager.ocr.paddle_protocol import (
     DEFAULT_PRESET,
@@ -49,6 +50,12 @@ log = logging.getLogger("vdm.ocr.paddle")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def sidecar_source_root() -> Path:
+    if is_frozen_app():
+        return Path(getattr(sys, "_MEIPASS")) / "sidecar_src"
+    return REPO_ROOT
+
+
 class PaddleOcrError(RuntimeError):
     """Sidecar communication or engine failure."""
 
@@ -63,8 +70,8 @@ def default_ocr_python() -> Path:
     if env:
         return Path(env)
     if os.name == "nt":
-        return REPO_ROOT / ".venv-ocr" / "Scripts" / "python.exe"
-    return REPO_ROOT / ".venv-ocr" / "bin" / "python"
+        return application_dir() / ".venv-ocr" / "Scripts" / "python.exe"
+    return application_dir() / ".venv-ocr" / "bin" / "python"
 
 
 class PaddleOcrProcess:
@@ -126,8 +133,9 @@ class PaddleOcrProcess:
 
     def _start_process(self) -> None:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        source_root = sidecar_source_root()
         env = dict(os.environ)
-        env["PYTHONPATH"] = str(REPO_ROOT)
+        env["PYTHONPATH"] = str(source_root)
         env["PYTHONIOENCODING"] = "utf-8"
         env["PADDLE_PDX_CACHE_HOME"] = str(self.cache_dir)
         # Keep every tool that resolves "~" writable and local.
@@ -137,7 +145,7 @@ class PaddleOcrProcess:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            cwd=str(REPO_ROOT),
+            cwd=str(source_root),
             env=env,
         )
         if os.name == "nt":
