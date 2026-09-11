@@ -16,11 +16,19 @@ from vehicle_dataset_manager import __version__
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="vehicle-dataset-manager",
-        description="Windows local vehicle image dataset builder for Vehicle Re-ID.",
+        description="Windows 本機車輛 Re-ID 影像資料集建立工具。",
+        add_help=False,
     )
+    parser._optionals.title = "選項"
+    parser.add_argument("-h", "--help", action="help", help="顯示這份說明後結束")
     parser.add_argument("--workspace", type=str, default=None,
-                        help="Workspace directory (default: Documents/VehicleDatasetManager)")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+                        help="工作區目錄（預設：Documents/VehicleDatasetManager）")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="顯示程式版本後結束",
+    )
     return parser.parse_args(argv)
 
 
@@ -48,10 +56,15 @@ def main(argv: list[str] | None = None) -> int:
         app_log.info("device info: CPU mode (CUDA disabled)")
 
     # Qt must be constructed before the QThreadPool-based JobRunner.
+    from PySide6.QtCore import QLibraryInfo, QTranslator
     from PySide6.QtWidgets import QApplication
 
     app = QApplication(sys.argv)
-    app.setApplicationName("Vehicle Dataset Manager")
+    qt_translator = QTranslator(app)
+    translations_dir = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    if qt_translator.load("qtbase_zh_TW", translations_dir):
+        app.installTranslator(qt_translator)
+    app.setApplicationName("車輛資料集管理工具")
     app.setOrganizationName("CPTR")
 
     db = Database(workspace.database_path)

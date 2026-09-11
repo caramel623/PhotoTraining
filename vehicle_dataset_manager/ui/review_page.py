@@ -40,17 +40,18 @@ from PySide6.QtWidgets import (
 from vehicle_dataset_manager.app_context import AppContext
 from vehicle_dataset_manager.core.enums import ReviewStatus
 from vehicle_dataset_manager.review_model import GroupImage, ReviewModel
+from vehicle_dataset_manager.ui.i18n import display_value
 
 
 GROUP_ROLE = int(Qt.ItemDataRole.UserRole)
 IMAGE_ROLE = GROUP_ROLE + 1
 
 _STATUS_LABELS = {
-    ReviewStatus.UNREVIEWED.value: "Unreviewed",
-    ReviewStatus.VERIFIED_SAME.value: "Same vehicle",
-    ReviewStatus.VERIFIED_NOT_SAME.value: "Not same",
-    ReviewStatus.UNCERTAIN.value: "Uncertain",
-    ReviewStatus.EXCLUDED.value: "Excluded",
+    ReviewStatus.UNREVIEWED.value: "尚未複核",
+    ReviewStatus.VERIFIED_SAME.value: "同一車輛",
+    ReviewStatus.VERIFIED_NOT_SAME.value: "不同車輛",
+    ReviewStatus.UNCERTAIN.value: "不確定",
+    ReviewStatus.EXCLUDED.value: "已排除",
 }
 
 _STATUS_COLOURS = {
@@ -126,28 +127,28 @@ class ReviewPage(QWidget):
         root = QVBoxLayout(self)
 
         toolbar = QHBoxLayout()
-        toolbar.addWidget(QLabel("Groups"))
+        toolbar.addWidget(QLabel("群組"))
         self.group_filter = QComboBox()
         self.group_filter.setObjectName("reviewGroupFilter")
-        self.group_filter.addItem("All", None)
-        self.group_filter.addItem("Automatic only", "automatic_only")
-        self.group_filter.addItem("Partially verified", "partially_verified")
-        self.group_filter.addItem("Verified", "verified")
+        self.group_filter.addItem("全部", None)
+        self.group_filter.addItem("僅自動判定", "automatic_only")
+        self.group_filter.addItem("部分已複核", "partially_verified")
+        self.group_filter.addItem("已確認", "verified")
         toolbar.addWidget(self.group_filter)
         toolbar.addSpacing(16)
-        toolbar.addWidget(QLabel("Images"))
+        toolbar.addWidget(QLabel("影像"))
         self.image_filter = QComboBox()
         self.image_filter.setObjectName("reviewImageFilter")
-        self.image_filter.addItem("All", None)
+        self.image_filter.addItem("全部", None)
         for status, label in _STATUS_LABELS.items():
             self.image_filter.addItem(label, status)
         toolbar.addWidget(self.image_filter)
-        self.btn_refresh = QPushButton("Refresh")
+        self.btn_refresh = QPushButton("重新整理")
         toolbar.addWidget(self.btn_refresh)
         toolbar.addStretch(1)
         self.help_label = QLabel(
-            "Enter=Same  Space=Next  N=Not same  U=Uncertain  "
-            "X=Exclude  E=Edit plate  M=Merge  S=Split"
+            "Enter＝同一車輛  Space＝下一張  N＝不同車輛  U＝不確定  "
+            "X＝排除  E＝修改車牌  M＝合併  S＝拆分"
         )
         self.help_label.setStyleSheet("color: #666;")
         toolbar.addWidget(self.help_label)
@@ -163,17 +164,17 @@ class ReviewPage(QWidget):
         right = QWidget()
         right_layout = QVBoxLayout(right)
         summary_row = QHBoxLayout()
-        self.summary_label = QLabel("Select a vehicle group.")
+        self.summary_label = QLabel("請選擇車輛群組。")
         self.summary_label.setObjectName("reviewSummary")
         self.summary_label.setWordWrap(True)
         self.summary_label.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         summary_row.addWidget(self.summary_label, 1)
-        self.btn_confirm = QPushButton("Confirm Group")
-        self.btn_merge = QPushButton("Merge…")
-        self.btn_split = QPushButton("Split Selected…")
-        self.btn_edit = QPushButton("Edit Plate…")
+        self.btn_confirm = QPushButton("確認整個群組")
+        self.btn_merge = QPushButton("合併…")
+        self.btn_split = QPushButton("拆分選取影像…")
+        self.btn_edit = QPushButton("修改車牌…")
         for button in (self.btn_confirm, self.btn_merge, self.btn_split, self.btn_edit):
             summary_row.addWidget(button)
         right_layout.addLayout(summary_row)
@@ -191,10 +192,10 @@ class ReviewPage(QWidget):
         right_layout.addWidget(self.image_list, 1)
 
         status_row = QHBoxLayout()
-        self.btn_same = QPushButton("Same Vehicle")
-        self.btn_not_same = QPushButton("Not Same")
-        self.btn_uncertain = QPushButton("Uncertain")
-        self.btn_excluded = QPushButton("Exclude")
+        self.btn_same = QPushButton("同一車輛")
+        self.btn_not_same = QPushButton("不同車輛")
+        self.btn_uncertain = QPushButton("不確定")
+        self.btn_excluded = QPushButton("排除")
         for button in (
             self.btn_same,
             self.btn_not_same,
@@ -203,7 +204,7 @@ class ReviewPage(QWidget):
         ):
             status_row.addWidget(button)
         status_row.addStretch(1)
-        self.review_progress_label = QLabel("Reviewed 0 / 0")
+        self.review_progress_label = QLabel("已複核 0／0")
         self.review_progress = QProgressBar()
         self.review_progress.setObjectName("reviewProgress")
         self.review_progress.setFixedWidth(220)
@@ -266,15 +267,15 @@ class ReviewPage(QWidget):
         self.group_list.clear()
         selected_item = None
         for group in groups:
-            plate = group.plate_normalized or "(no plate)"
+            plate = group.plate_normalized or "（無車牌）"
             item = QListWidgetItem(
-                f"{plate}  ·  {group.image_count} image(s)\n"
-                f"{group.vehicle_id}  ·  {group.verification}"
+                f"{plate}  ·  {group.image_count} 張影像\n"
+                f"{group.vehicle_id}  ·  {display_value(group.verification)}"
             )
             item.setData(GROUP_ROLE, group.vehicle_id)
             item.setToolTip(
-                f"Source: {group.source}\nCameras: {', '.join(group.cameras) or '-'}\n"
-                f"Years: {', '.join(map(str, group.years)) or '-'}"
+                f"來源：{display_value(group.source)}\n相機：{', '.join(group.cameras) or '-'}\n"
+                f"年份：{', '.join(map(str, group.years)) or '-'}"
             )
             self.group_list.addItem(item)
             if group.vehicle_id == wanted:
@@ -310,10 +311,10 @@ class ReviewPage(QWidget):
         cameras = ", ".join(summary.cameras) or "-"
         years = ", ".join(map(str, summary.years)) or "-"
         self.summary_label.setText(
-            f"<b>{summary.plate_normalized or '(no plate)'}</b> &nbsp; "
+            f"<b>{summary.plate_normalized or '（無車牌）'}</b> &nbsp; "
             f"{summary.vehicle_id}<br>"
-            f"{summary.image_count} image(s) · Cameras: {cameras} · Years: {years} · "
-            f"Verification: {summary.verification}"
+            f"{summary.image_count} 張影像 · 相機：{cameras} · 年份：{years} · "
+            f"確認狀態：{display_value(summary.verification)}"
         )
         self._thumb_generation += 1
         generation = self._thumb_generation
@@ -332,9 +333,9 @@ class ReviewPage(QWidget):
             item = QListWidgetItem(placeholder, "\n".join(details))
             item.setData(IMAGE_ROLE, image.image_id)
             item.setToolTip(
-                f"Image ID: {image.image_id}\nPlate: {image.plate_text_normalized or '-'}\n"
-                f"Confidence: {image.confidence if image.confidence is not None else '-'}\n"
-                f"Path: {image.display_path or '(missing)'}"
+                f"影像 ID：{image.image_id}\n車牌：{image.plate_text_normalized or '-'}\n"
+                f"信心值：{image.confidence if image.confidence is not None else '-'}\n"
+                f"路徑：{image.display_path or '（檔案不存在）'}"
             )
             item.setBackground(QBrush(_STATUS_COLOURS.get(image.review_status, QColor("white"))))
             self.image_list.addItem(item)
@@ -395,8 +396,8 @@ class ReviewPage(QWidget):
             return
         if QMessageBox.question(
             self,
-            "Confirm vehicle group",
-            "Mark this entire group as human verified?",
+            "確認車輛群組",
+            "要將整個群組標記為已經人工確認嗎？",
         ) != QMessageBox.StandardButton.Yes:
             return
         self.model.confirm_group(vehicle_id)
@@ -411,8 +412,8 @@ class ReviewPage(QWidget):
         current = next((x for x in self._images if x.image_id == image_id), None)
         plate, ok = QInputDialog.getText(
             self,
-            "Edit plate",
-            "Correct plate text:",
+            "修改車牌",
+            "正確的車牌文字：",
             text=current.plate_text_normalized if current else "",
         )
         if not ok:
@@ -422,7 +423,7 @@ class ReviewPage(QWidget):
                 image_id, plate, current_vehicle=vehicle_id
             )
         except ValueError as exc:
-            QMessageBox.warning(self, "Edit plate", str(exc))
+            QMessageBox.warning(self, "修改車牌", str(exc))
             return
         self._selection.image_id = image_id
         self.refresh_groups(select_vehicle=target)
@@ -432,29 +433,29 @@ class ReviewPage(QWidget):
         if not source:
             return
         choices = [
-            f"{g.vehicle_id} — {g.plate_normalized or '(no plate)'}"
+            f"{g.vehicle_id} — {g.plate_normalized or '（無車牌）'}"
             for g in self.model.list_groups()
             if g.vehicle_id != source
         ]
         if not choices:
-            QMessageBox.information(self, "Merge", "No other vehicle group is available.")
+            QMessageBox.information(self, "合併", "目前沒有其他可合併的車輛群組。")
             return
         selected, ok = QInputDialog.getItem(
-            self, "Merge group", "Keep target group:", choices, 0, False
+            self, "合併群組", "選擇要保留的目標群組：", choices, 0, False
         )
         if not ok:
             return
         target = selected.split(" — ", 1)[0]
         if QMessageBox.question(
             self,
-            "Merge group",
-            f"Merge {source} into {target}?\nOnly group relationships change; source images stay untouched.",
+            "合併群組",
+            f"要將 {source} 合併到 {target} 嗎？\n只會變更群組關係，原始影像不會被修改。",
         ) != QMessageBox.StandardButton.Yes:
             return
         try:
             kept = self.model.merge(source, target)
         except ValueError as exc:
-            QMessageBox.critical(self, "Merge failed", str(exc))
+            QMessageBox.critical(self, "合併失敗", str(exc))
             return
         self.refresh_groups(select_vehicle=kept)
 
@@ -462,23 +463,23 @@ class ReviewPage(QWidget):
         vehicle_id = self._selection.vehicle_id
         image_ids = self._selected_image_ids()
         if not vehicle_id or not image_ids:
-            QMessageBox.information(self, "Split", "Select one or more images first.")
+            QMessageBox.information(self, "拆分", "請先選取一張或多張影像。")
             return
         if len(image_ids) >= len(self._images):
             QMessageBox.warning(
-                self, "Split", "Select fewer than all images so the source group remains non-empty."
+                self, "拆分", "請勿選取全部影像，來源群組至少必須保留一張影像。"
             )
             return
         if QMessageBox.question(
             self,
-            "Split group",
-            f"Move {len(image_ids)} selected image(s) into a new vehicle group?",
+            "拆分群組",
+            f"要將選取的 {len(image_ids)} 張影像移到新的車輛群組嗎？",
         ) != QMessageBox.StandardButton.Yes:
             return
         try:
             new_id = self.model.split(vehicle_id, image_ids)
         except ValueError as exc:
-            QMessageBox.critical(self, "Split failed", str(exc))
+            QMessageBox.critical(self, "拆分失敗", str(exc))
             return
         self._selection.image_id = image_ids[0]
         self.refresh_groups(select_vehicle=new_id)
@@ -497,7 +498,7 @@ class ReviewPage(QWidget):
         )
         self.review_progress.setRange(0, max(total, 1))
         self.review_progress.setValue(reviewed)
-        self.review_progress_label.setText(f"Reviewed {reviewed} / {total}")
+        self.review_progress_label.setText(f"已複核 {reviewed}／{total}")
 
     def _update_actions(self) -> None:
         has_group = bool(self._selection.vehicle_id)
@@ -519,10 +520,10 @@ class ReviewPage(QWidget):
         self._images = []
         self._image_items.clear()
         self.image_list.clear()
-        self.summary_label.setText("No vehicle groups match the current filter.")
+        self.summary_label.setText("沒有符合目前篩選條件的車輛群組。")
         self.review_progress.setRange(0, 1)
         self.review_progress.setValue(0)
-        self.review_progress_label.setText("Reviewed 0 / 0")
+        self.review_progress_label.setText("已複核 0／0")
         self._update_actions()
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override

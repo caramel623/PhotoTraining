@@ -61,17 +61,17 @@ def gpu_report(use_cuda: bool = False) -> str:
     torch = _torch()
     if torch is None:
         return (
-            "GPU: n/a (PyTorch not installed)\n"
-            "CUDA available: No\n"
-            "Device: cpu (CPU / stub mode)"
+            "GPU：無法取得（未安裝 PyTorch）\n"
+            "CUDA 可用：否\n"
+            "運算裝置：CPU（停用模型模式）"
         )
     avail = cuda_available()
-    name = gpu_name() if avail else "(no CUDA-capable GPU)"
+    name = gpu_name() if avail else "未偵測到支援 CUDA 的 GPU"
     device = resolve_device(use_cuda)
     lines = [
-        f"GPU: {name}",
-        f"CUDA available: {'Yes' if avail else 'No'}",
-        f"Device: {device}",
+        f"GPU：{name}",
+        f"CUDA 可用：{'是' if avail else '否'}",
+        f"運算裝置：{device.upper()}",
     ]
     if torch_info():
         lines.append(torch_info())

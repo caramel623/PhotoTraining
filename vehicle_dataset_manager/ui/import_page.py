@@ -29,7 +29,7 @@ from vehicle_dataset_manager.services.import_service import detect_year
 
 log = logging.getLogger("vdm.app")
 
-_ARCHIVE_FILTER = "Archives (*.zip *.7z *.7zip);;All files (*)"
+_ARCHIVE_FILTER = "壓縮檔 (*.zip *.7z *.7zip);;所有檔案 (*)"
 
 
 class ImportPage(QWidget):
@@ -46,10 +46,10 @@ class ImportPage(QWidget):
         root = QVBoxLayout(self)
 
         top = QHBoxLayout()
-        self.btn_files = QPushButton("Add Archive(s)…")
-        self.btn_folder = QPushButton("Add Folder…")
-        self.btn_remove = QPushButton("Remove")
-        self.btn_clear = QPushButton("Clear")
+        self.btn_files = QPushButton("加入壓縮檔…")
+        self.btn_folder = QPushButton("加入資料夾…")
+        self.btn_remove = QPushButton("移除")
+        self.btn_clear = QPushButton("清除")
         for b in (self.btn_files, self.btn_folder, self.btn_remove, self.btn_clear):
             top.addWidget(b)
         top.addStretch(1)
@@ -60,14 +60,14 @@ class ImportPage(QWidget):
         self.archive_list.setSelectionMode(QListWidget.ExtendedSelection)
         mid.addWidget(self.archive_list, 3)
         right = QVBoxLayout()
-        right.addWidget(QLabel("Year (blank = auto-detect from name)"))
+        right.addWidget(QLabel("年份（留空則從檔名自動判斷）"))
         self.year_spin = QSpinBox()
         self.year_spin.setRange(1990, 2100)
         self.year_spin.setValue(0)
-        self.year_spin.setSpecialValueText("auto")
+        self.year_spin.setSpecialValueText("自動")
         self.year_spin.setValue(0)
         right.addWidget(self.year_spin)
-        self.btn_import = QPushButton("Import & Register")
+        self.btn_import = QPushButton("匯入並登錄")
         self.btn_import.setMinimumHeight(40)
         right.addWidget(self.btn_import)
         right.addStretch(1)
@@ -81,7 +81,7 @@ class ImportPage(QWidget):
 
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
-            ["Archive", "Type", "Year", "Images Found", "New", "Job"]
+            ["壓縮檔", "類型", "年份", "找到影像", "新增", "工作編號"]
         )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         root.addWidget(self.table, 1)
@@ -94,12 +94,12 @@ class ImportPage(QWidget):
 
     # -- selection -------------------------------------------------------
     def _add_files(self) -> None:
-        files, _ = QFileDialog.getOpenFileNames(self, "Select archives", str(Path.home()), _ARCHIVE_FILTER)
+        files, _ = QFileDialog.getOpenFileNames(self, "選擇壓縮檔", str(Path.home()), _ARCHIVE_FILTER)
         for f in files:
             self._add(Path(f))
 
     def _add_folder(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Select a folder of archives", str(Path.home()))
+        folder = QFileDialog.getExistingDirectory(self, "選擇含有壓縮檔的資料夾", str(Path.home()))
         if not folder:
             return
         folder = Path(folder)
@@ -112,10 +112,10 @@ class ImportPage(QWidget):
             return
         atype = detect_archive_type(path)
         if atype not in (ArchiveType.ZIP, ArchiveType.SEVEN_Z):
-            QMessageBox.warning(self, "Unsupported", f"Not a ZIP/7Z archive:\n{path}")
+            QMessageBox.warning(self, "不支援的格式", f"這不是 ZIP／7Z 壓縮檔：\n{path}")
             return
-        year = detect_year(path.name) or "auto"
-        item = QListWidgetItem(f"{path.name}   [{atype.value}]   year={year}")
+        year = detect_year(path.name) or "自動"
+        item = QListWidgetItem(f"{path.name}   [{atype.value}]   年份={year}")
         item.setData(0, str(path))
         self.archive_list.addItem(item)
         self._selected.append(path)
@@ -136,10 +136,10 @@ class ImportPage(QWidget):
     # -- import ----------------------------------------------------------
     def _import(self) -> None:
         if not self._selected:
-            QMessageBox.information(self, "Import", "Add at least one archive first.")
+            QMessageBox.information(self, "匯入", "請先加入至少一個壓縮檔。")
             return
         if self.runner.is_running:
-            QMessageBox.information(self, "Import", "A job is already running.")
+            QMessageBox.information(self, "匯入", "目前已有工作正在執行。")
             return
         year = self._year()
         paths = list(self._selected)
@@ -184,10 +184,10 @@ class ImportPage(QWidget):
             self.table.setItem(row, 5, QTableWidgetItem(str(r.job_id)))
         self._clear()
         self.refresh_requested.emit()
-        QMessageBox.information(self, "Import complete", f"Registered {len(results)} archive(s). See Processing to run.")
+        QMessageBox.information(self, "匯入完成", f"已登錄 {len(results)} 個壓縮檔。請到「影像處理」頁開始執行。")
 
     def _import_error(self, message) -> None:
         self.btn_import.setEnabled(True)
         self.progress.setRange(0, 1)
         self.progress.setValue(0)
-        QMessageBox.critical(self, "Import error", message)
+        QMessageBox.critical(self, "匯入錯誤", message)

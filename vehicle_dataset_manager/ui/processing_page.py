@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from vehicle_dataset_manager.app_context import AppContext
+from vehicle_dataset_manager.ui.i18n import display_value
 
 log = logging.getLogger("vdm.processing")
 
@@ -38,11 +39,11 @@ class ProcessingPage(QWidget):
         root = QVBoxLayout(self)
 
         top = QHBoxLayout()
-        self.btn_process_all = QPushButton("Process All Pending")
-        self.btn_resume = QPushButton("Resume Selected Job")
-        self.btn_cancel = QPushButton("Cancel")
-        self.btn_retry = QPushButton("Retry Failed")
-        self.btn_refresh = QPushButton("Refresh")
+        self.btn_process_all = QPushButton("處理全部待辦影像")
+        self.btn_resume = QPushButton("繼續選取的工作")
+        self.btn_cancel = QPushButton("取消")
+        self.btn_retry = QPushButton("重試失敗項目")
+        self.btn_refresh = QPushButton("重新整理")
         for b in (self.btn_process_all, self.btn_resume, self.btn_cancel, self.btn_retry, self.btn_refresh):
             top.addWidget(b)
         top.addStretch(1)
@@ -50,7 +51,7 @@ class ProcessingPage(QWidget):
 
         self.table = QTableWidget(0, 8)
         self.table.setHorizontalHeaderLabels(
-            ["Job", "Type", "Status", "Total", "Processed", "Failed", "Pending", "Archive"]
+            ["工作編號", "類型", "狀態", "總數", "已處理", "失敗", "待處理", "壓縮檔"]
         )
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -72,13 +73,13 @@ class ProcessingPage(QWidget):
         self.table.setRowCount(len(rows))
         for i, job in enumerate(rows):
             self.table.setItem(i, 0, QTableWidgetItem(str(job["job_id"])))
-            self.table.setItem(i, 1, QTableWidgetItem(str(job["job_type"])))
-            self.table.setItem(i, 2, QTableWidgetItem(str(job["status"])))
+            self.table.setItem(i, 1, QTableWidgetItem(display_value(job["job_type"])))
+            self.table.setItem(i, 2, QTableWidgetItem(display_value(job["status"])))
             self.table.setItem(i, 3, QTableWidgetItem(str(job["total"])))
             self.table.setItem(i, 4, QTableWidgetItem(str(job["processed"])))
             self.table.setItem(i, 5, QTableWidgetItem(str(job["failed"])))
             self.table.setItem(i, 6, QTableWidgetItem(str(job["pending"])))
-            self.table.setItem(i, 7, QTableWidgetItem(str(job["archive_path"] or "(all)")))
+            self.table.setItem(i, 7, QTableWidgetItem(str(job["archive_path"] or "（全部）")))
         self._set_running_ui()
 
     def _selected_job_id(self) -> Optional[int]:
@@ -112,7 +113,7 @@ class ProcessingPage(QWidget):
         counts = self.ctx.images.counts()
         pending = counts["pending"] + counts["processing"]
         if pending == 0:
-            QMessageBox.information(self, "Processing", "No pending images. Import archives first (or Retry Failed).")
+            QMessageBox.information(self, "影像處理", "沒有待處理影像。請先匯入壓縮檔，或重試失敗項目。")
             return
         job_id = self.ctx.jobs.create("process", None, total=pending)
         self._run_engine(job_id)
@@ -120,14 +121,14 @@ class ProcessingPage(QWidget):
     def _resume(self) -> None:
         job_id = self._selected_job_id()
         if job_id is None:
-            QMessageBox.information(self, "Processing", "Select a job to resume.")
+            QMessageBox.information(self, "影像處理", "請選擇要繼續的工作。")
             return
         self._run_engine(job_id)
 
     def _retry(self) -> None:
         n = self.ctx.images.retry_failed()
         self.refresh()
-        QMessageBox.information(self, "Retry", f"{n} failed image(s) reset to pending. Press 'Process All Pending'.")
+        QMessageBox.information(self, "重試", f"已將 {n} 張失敗影像重設為待處理。請按「處理全部待辦影像」。")
 
     def _progress(self, done, total, current) -> None:
         if total > 0:
@@ -143,8 +144,8 @@ class ProcessingPage(QWidget):
         self.refresh_requested.emit()
         if result is not None:
             QMessageBox.information(
-                self, "Processing",
-                f"State: {result.final_state.value}\nProcessed: {result.processed}\nFailed: {result.failed}\nPending left: {result.pending_left}",
+                self, "影像處理",
+                f"狀態：{display_value(result.final_state.value)}\n已處理：{result.processed}\n失敗：{result.failed}\n剩餘待處理：{result.pending_left}",
             )
 
     def _error(self, message) -> None:
@@ -152,4 +153,4 @@ class ProcessingPage(QWidget):
         self._set_running_ui()
         self.refresh()
         self.refresh_requested.emit()
-        QMessageBox.critical(self, "Processing error", message)
+        QMessageBox.critical(self, "處理錯誤", message)

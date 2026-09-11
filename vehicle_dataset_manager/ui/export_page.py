@@ -45,30 +45,30 @@ class ExportPage(QWidget):
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
 
-        destination = QGroupBox("Destination")
+        destination = QGroupBox("輸出位置")
         destination_form = QFormLayout(destination)
         path_row = QHBoxLayout()
         self.output_path = QLineEdit()
         self.output_path.setObjectName("exportOutputPath")
-        self.btn_browse = QPushButton("Browse…")
+        self.btn_browse = QPushButton("瀏覽…")
         path_row.addWidget(self.output_path, 1)
         path_row.addWidget(self.btn_browse)
-        destination_form.addRow("Dataset folder", path_row)
+        destination_form.addRow("資料集資料夾", path_row)
         root.addWidget(destination)
 
-        options = QGroupBox("Labels and images")
+        options = QGroupBox("標籤與影像")
         options_form = QFormLayout(options)
         self.label_policy = QComboBox()
         self.label_policy.setObjectName("exportLabelPolicy")
         self.label_policy.addItem(
-            "Human verified only (recommended)", ("human_verified",)
+            "僅限人工確認（建議）", ("human_verified",)
         )
         self.label_policy.addItem(
-            "Human + high-confidence plate",
+            "人工確認＋高信心車牌",
             ("human_verified", "high_confidence_plate_match"),
         )
         self.label_policy.addItem(
-            "Include automatic candidates",
+            "包含自動候選項目",
             (
                 "human_verified",
                 "high_confidence_plate_match",
@@ -76,64 +76,66 @@ class ExportPage(QWidget):
             ),
         )
         self.mask_method = QComboBox()
-        self.mask_method.addItems(["solid_color", "blur", "inpaint"])
+        self.mask_method.addItem("純色遮罩", "solid_color")
+        self.mask_method.addItem("模糊", "blur")
+        self.mask_method.addItem("影像修補", "inpaint")
         self.mask_margin = QSpinBox()
         self.mask_margin.setRange(0, 60)
         self.image_quality = QSpinBox()
         self.image_quality.setRange(1, 100)
         self.image_quality.setSuffix("%")
-        self.copy_originals = QCheckBox("Copy originals into Dataset/images")
+        self.copy_originals = QCheckBox("將原始影像複製到 Dataset/images")
         self.copy_originals.setChecked(True)
         self.require_plate = QCheckBox(
-            "Skip images without a reliable plate bbox (recommended)"
+            "略過沒有可靠車牌範圍的影像（建議）"
         )
         self.require_plate.setChecked(True)
-        options_form.addRow("Training labels", self.label_policy)
-        options_form.addRow("Plate mask", self.mask_method)
-        options_form.addRow("Mask margin", self.mask_margin)
-        options_form.addRow("JPEG quality", self.image_quality)
+        options_form.addRow("訓練標籤", self.label_policy)
+        options_form.addRow("車牌遮罩", self.mask_method)
+        options_form.addRow("遮罩邊界", self.mask_margin)
+        options_form.addRow("JPEG 品質", self.image_quality)
         options_form.addRow(self.copy_originals)
         options_form.addRow(self.require_plate)
         root.addWidget(options)
 
-        split = QGroupBox("Leakage-safe split")
+        split = QGroupBox("避免資料洩漏的資料切分")
         split_form = QFormLayout(split)
         self.split_strategy = QComboBox()
         self.split_strategy.setObjectName("exportSplitStrategy")
-        self.split_strategy.addItem("Group hash (70/15/15)", "group_hash")
-        self.split_strategy.addItem("Time based", "time")
-        self.split_strategy.addItem("Camera based", "camera")
+        self.split_strategy.addItem("群組雜湊（70／15／15）", "group_hash")
+        self.split_strategy.addItem("依時間切分", "time")
+        self.split_strategy.addItem("依相機切分", "camera")
         self.val_years = QLineEdit()
-        self.val_years.setPlaceholderText("Example: 2025")
+        self.val_years.setPlaceholderText("例如：2025")
         self.test_years = QLineEdit()
-        self.test_years.setPlaceholderText("Example: 2026")
+        self.test_years.setPlaceholderText("例如：2026")
         self.val_cameras = QLineEdit()
-        self.val_cameras.setPlaceholderText("Comma-separated camera IDs")
+        self.val_cameras.setPlaceholderText("以逗號分隔相機 ID")
         self.test_cameras = QLineEdit()
-        self.test_cameras.setPlaceholderText("Example: RS017")
+        self.test_cameras.setPlaceholderText("例如：RS017")
         self.seed = QSpinBox()
         self.seed.setRange(0, 2_147_483_647)
         self.seed.setValue(42)
-        split_form.addRow("Strategy", self.split_strategy)
-        split_form.addRow("Validation years", self.val_years)
-        split_form.addRow("Test years", self.test_years)
-        split_form.addRow("Validation cameras", self.val_cameras)
-        split_form.addRow("Test cameras", self.test_cameras)
-        split_form.addRow("Deterministic seed", self.seed)
+        split_form.addRow("切分方式", self.split_strategy)
+        split_form.addRow("驗證集年份", self.val_years)
+        split_form.addRow("測試集年份", self.test_years)
+        split_form.addRow("驗證集相機", self.val_cameras)
+        split_form.addRow("測試集相機", self.test_cameras)
+        split_form.addRow("固定亂數種子", self.seed)
         root.addWidget(split)
 
         actions = QHBoxLayout()
-        self.btn_preview = QPushButton("Preview Eligible Count")
-        self.btn_export = QPushButton("Export Dataset")
-        self.btn_index = QPushButton("Build Re-ID Index")
-        self.btn_cancel = QPushButton("Cancel")
+        self.btn_preview = QPushButton("預覽可匯出數量")
+        self.btn_export = QPushButton("匯出資料集")
+        self.btn_index = QPushButton("建立 Re-ID 索引")
+        self.btn_cancel = QPushButton("取消")
         self.btn_cancel.setEnabled(False)
         actions.addWidget(self.btn_preview)
         actions.addWidget(self.btn_export)
         actions.addWidget(self.btn_index)
         actions.addWidget(self.btn_cancel)
         actions.addStretch(1)
-        self.status_label = QLabel("Ready.")
+        self.status_label = QLabel("準備就緒。")
         actions.addWidget(self.status_label)
         root.addLayout(actions)
 
@@ -145,7 +147,7 @@ class ExportPage(QWidget):
         self.log.setObjectName("exportLog")
         self.log.setReadOnly(True)
         self.log.setPlaceholderText(
-            "Export results and skip reasons appear here. No network is used."
+            "匯出結果與略過原因會顯示於此；全程不使用網路。"
         )
         root.addWidget(self.log, 1)
 
@@ -159,7 +161,9 @@ class ExportPage(QWidget):
     def _load_defaults(self) -> None:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.output_path.setText(str(self.ctx.workspace.exports_dir / f"Dataset_{stamp}"))
-        self.mask_method.setCurrentText(self.ctx.settings.mask.method)
+        mask_index = self.mask_method.findData(self.ctx.settings.mask.method)
+        if mask_index >= 0:
+            self.mask_method.setCurrentIndex(mask_index)
         self.mask_margin.setValue(self.ctx.settings.mask.margin)
         self.image_quality.setValue(self.ctx.settings.export.image_quality)
         self._update_split_fields()
@@ -167,7 +171,7 @@ class ExportPage(QWidget):
     def _browse(self) -> None:
         selected = QFileDialog.getExistingDirectory(
             self,
-            "Select an empty or resumable dataset folder",
+            "選擇空白或可繼續匯出的資料集資料夾",
             str(self.ctx.workspace.exports_dir),
         )
         if selected:
@@ -185,7 +189,7 @@ class ExportPage(QWidget):
         )
         return ExportOptions(
             label_priorities=tuple(self.label_policy.currentData()),
-            mask_method=self.mask_method.currentText(),
+            mask_method=str(self.mask_method.currentData()),
             mask_margin=self.mask_margin.value(),
             image_quality=self.image_quality.value(),
             copy_originals=self.copy_originals.isChecked(),
@@ -197,32 +201,32 @@ class ExportPage(QWidget):
         try:
             preview = self.exporter.preview(self._options())
         except ValueError as exc:
-            QMessageBox.warning(self, "Export settings", str(exc))
+            QMessageBox.warning(self, "匯出設定", str(exc))
             return
         eligible = preview["candidates"] - preview["review_rejected"]
         self.status_label.setText(
-            f"Eligible: {eligible} / {preview['candidates']} candidate image(s)"
+            f"可匯出：{eligible}／{preview['candidates']} 張候選影像"
         )
 
     def _start_export(self) -> None:
         if self.runner.is_running:
-            QMessageBox.information(self, "Export", "Another job is already running.")
+            QMessageBox.information(self, "匯出", "目前已有其他工作正在執行。")
             return
         output = self.output_path.text().strip()
         if not output:
-            QMessageBox.warning(self, "Export", "Choose a dataset folder.")
+            QMessageBox.warning(self, "匯出", "請選擇資料集資料夾。")
             return
         try:
             options = self._options()
             preview = self.exporter.preview(options)
         except ValueError as exc:
-            QMessageBox.warning(self, "Export settings", str(exc))
+            QMessageBox.warning(self, "匯出設定", str(exc))
             return
         if preview["candidates"] == 0:
             QMessageBox.information(
                 self,
-                "Export",
-                "No completed grouped images match the selected label policy.",
+                "匯出",
+                "沒有符合所選標籤規則的已完成群組影像。",
             )
             return
 
@@ -236,7 +240,7 @@ class ExportPage(QWidget):
             )
 
         self.log.clear()
-        self.log.appendPlainText("Local export started: " + output)
+        self.log.appendPlainText("開始本機匯出：" + output)
         self._set_running(True)
         signals = self.runner.start(do_export)
         signals.progress.connect(self._progress)
@@ -245,12 +249,12 @@ class ExportPage(QWidget):
 
     def _start_index(self) -> None:
         if self.runner.is_running:
-            QMessageBox.information(self, "Re-ID", "Another job is already running.")
+            QMessageBox.information(self, "Re-ID", "目前已有其他工作正在執行。")
             return
         root = Path(self.output_path.text().strip()).expanduser()
         if not (root / "metadata" / "manifest.jsonl").is_file():
             QMessageBox.warning(
-                self, "Re-ID", "Choose a completed Phase 5 dataset folder."
+                self, "Re-ID", "請選擇已完成匯出的資料集資料夾。"
             )
             return
         engine = getattr(self.ctx, "reid", None)
@@ -258,7 +262,7 @@ class ExportPage(QWidget):
             QMessageBox.information(
                 self,
                 "Re-ID",
-                "Configure an existing ONNX Re-ID model in Settings first.",
+                "請先在「設定」頁指定現有的 ONNX Re-ID 模型。",
             )
             return
         checkpoint_every = getattr(
@@ -275,7 +279,7 @@ class ExportPage(QWidget):
             )
 
         self.log.clear()
-        self.log.appendPlainText("Local Re-ID indexing started: " + str(root))
+        self.log.appendPlainText("開始建立本機 Re-ID 索引：" + str(root))
         self._set_running(True)
         signals = self.runner.start(do_index)
         signals.progress.connect(self._progress)
@@ -290,42 +294,42 @@ class ExportPage(QWidget):
     def _done(self, result) -> None:
         self._set_running(False)
         if not isinstance(result, ExportResult):
-            self.status_label.setText("Export stopped.")
+            self.status_label.setText("匯出已停止。")
             return
-        state = "Cancelled; resumable" if result.cancelled else "Complete"
+        state = "已取消，可繼續" if result.cancelled else "已完成"
         self.status_label.setText(
-            f"{state}: exported={result.exported}, skipped={result.skipped}"
+            f"{state}：已匯出={result.exported}，已略過={result.skipped}"
         )
         self.log.appendPlainText(
-            f"{state}\nImages: {result.exported}/{result.total}\n"
-            f"Splits: {result.split_counts}\nPairs: {result.pair_count}\n"
-            f"Triplets: {result.triplet_count}\nSkip reasons: {result.skip_reasons}"
+            f"{state}\n影像：{result.exported}／{result.total}\n"
+            f"資料切分：{result.split_counts}\n影像配對：{result.pair_count}\n"
+            f"三元組：{result.triplet_count}\n略過原因：{result.skip_reasons}"
         )
         if not result.cancelled:
             QMessageBox.information(
-                self, "Export complete", f"Dataset written locally to:\n{result.output_dir}"
+                self, "匯出完成", f"資料集已寫入本機：\n{result.output_dir}"
             )
 
     def _error(self, message: str) -> None:
         self._set_running(False)
-        self.status_label.setText("Export failed.")
-        self.log.appendPlainText("ERROR: " + message)
-        QMessageBox.critical(self, "Export failed", message)
+        self.status_label.setText("匯出失敗。")
+        self.log.appendPlainText("錯誤：" + message)
+        QMessageBox.critical(self, "匯出失敗", message)
 
     def _index_done(self, result) -> None:
         self._set_running(False)
         if not isinstance(result, IndexBuildResult):
-            self.status_label.setText("Re-ID indexing stopped.")
+            self.status_label.setText("Re-ID 索引建立已停止。")
             return
-        state = "Cancelled; resumable" if result.cancelled else "Complete"
+        state = "已取消，可繼續" if result.cancelled else "已完成"
         self.status_label.setText(
-            f"{state}: indexed={result.indexed}, reused={result.reused}, "
-            f"failed={result.failed}"
+            f"{state}：已建立索引={result.indexed}，重複使用={result.reused}，"
+            f"失敗={result.failed}"
         )
         self.log.appendPlainText(
-            f"{state}\nIndexed: {result.indexed}/{result.total}\n"
-            f"Reused: {result.reused}\nFailed: {result.failed}\n"
-            f"Index: {result.index_path}"
+            f"{state}\n已建立索引：{result.indexed}／{result.total}\n"
+            f"重複使用：{result.reused}\n失敗：{result.failed}\n"
+            f"索引：{result.index_path}"
         )
 
     def _set_running(self, running: bool) -> None:
@@ -353,7 +357,7 @@ def _parse_ints(text: str) -> tuple[int, ...]:
         try:
             values.append(int(part))
         except ValueError as exc:
-            raise ValueError(f"invalid year: {part}") from exc
+            raise ValueError(f"年份格式無效：{part}") from exc
     return tuple(sorted(set(values)))
 
 

@@ -7,4 +7,4 @@ Core principle: plate OCR is used as a *weak supervision / grouping* signal,
 never as a Re-ID feature. The Re-ID model must learn vehicle appearance.
 """
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"

@@ -44,13 +44,13 @@ def test_export_page_defaults_to_safe_local_options(db, workspace):
     assert options.require_plate_bbox is True
     assert options.copy_originals is True
     assert str(workspace.exports_dir) in page.output_path.text()
-    assert page.btn_index.text() == "Build Re-ID Index"
+    assert page.btn_index.text() == "建立 Re-ID 索引"
     page._set_running(True)
     assert not page.btn_index.isEnabled()
     page._set_running(False)
     assert page.btn_index.isEnabled()
     page._preview()
-    assert "Eligible: 0 / 0" in page.status_label.text()
+    assert "可匯出：0／0" in page.status_label.text()
     page.close()
 
 
@@ -77,5 +77,5 @@ def test_export_page_parses_time_and_camera_configuration(db, workspace):
 
 
 def test_parse_ints_rejects_invalid_year():
-    with pytest.raises(ValueError, match="invalid year"):
+    with pytest.raises(ValueError, match="年份格式無效"):
         _parse_ints("2025, twenty-six")

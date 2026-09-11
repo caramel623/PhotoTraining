@@ -22,7 +22,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.ctx = ctx
         self.runner = runner
-        self.setWindowTitle("Vehicle Dataset Manager")
+        self.setWindowTitle("車輛資料集管理工具")
         self.resize(1280, 820)
 
         self.tabs = QTabWidget()
@@ -37,14 +37,14 @@ class MainWindow(QMainWindow):
         self.logs_page = LogsPage(ctx)
         self.project_page = ProjectPage(ctx)
 
-        self.tabs.addTab(self.import_page, "Import")
-        self.tabs.addTab(self.processing_page, "Processing")
-        self.tabs.addTab(self.review_page, "Review")
-        self.tabs.addTab(self.vehicle_group_page, "Vehicle Groups")
-        self.tabs.addTab(self.export_page, "Dataset Export")
-        self.tabs.addTab(self.settings_page, "Settings")
-        self.tabs.addTab(self.logs_page, "Logs")
-        self.tabs.addTab(self.project_page, "Project")
+        self.tabs.addTab(self.import_page, "匯入")
+        self.tabs.addTab(self.processing_page, "影像處理")
+        self.tabs.addTab(self.review_page, "人工複核")
+        self.tabs.addTab(self.vehicle_group_page, "車輛群組")
+        self.tabs.addTab(self.export_page, "資料集匯出")
+        self.tabs.addTab(self.settings_page, "設定")
+        self.tabs.addTab(self.logs_page, "日誌")
+        self.tabs.addTab(self.project_page, "專案資訊")
         self.tabs.currentChanged.connect(self._refresh_visible_page)
 
         self.setCentralWidget(self.tabs)
@@ -68,10 +68,10 @@ class MainWindow(QMainWindow):
     def _update_status(self, *_args) -> None:
         counts = self.ctx.images.counts()
         self.status.showMessage(
-            f"Workspace: {self.ctx.workspace.root}   |   "
-            f"Images: total={counts['total']}  pending={counts['pending']}  "
-            f"completed={counts['completed']}  failed={counts['failed']}  "
-            f"skipped={counts['skipped']}"
+            f"工作區：{self.ctx.workspace.root}   |   "
+            f"影像：總數={counts['total']}  待處理={counts['pending']}  "
+            f"已完成={counts['completed']}  失敗={counts['failed']}  "
+            f"已略過={counts['skipped']}"
         )
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override

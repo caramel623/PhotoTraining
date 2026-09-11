@@ -28,14 +28,14 @@ def test_cuda_only_when_requested_and_available():
 def test_gpu_report_shape():
     report = gpu_report(False)
     assert isinstance(report, str)
-    assert "CUDA available:" in report
-    assert "Device:" in report
-    assert "GPU:" in report
+    assert "CUDA 可用：" in report
+    assert "運算裝置：" in report
+    assert "GPU：" in report
 
 
 def test_gpu_report_cuda_flag():
     cpu = gpu_report(False)
-    assert "Device: cpu" in cpu
+    assert "運算裝置：CPU" in cpu
 
 
 def test_settings_defaults():
