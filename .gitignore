@@ -24,6 +24,7 @@ paddlex_home/
 # Workspace with photos, crops, DB (machine-local, never commit)
 runs/
 workspace/
+cuda-runtime/
 
 # Archives (photos) - keep out of git
 *.7z

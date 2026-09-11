@@ -7,4 +7,11 @@ Core principle: plate OCR is used as a *weak supervision / grouping* signal,
 never as a Re-ID feature. The Re-ID model must learn vehicle appearance.
 """
 
-__version__ = "0.0.3"
+from vehicle_dataset_manager.core.portable_runtime import (
+    activate_portable_cuda_runtime as _activate_portable_cuda_runtime,
+)
+
+_activate_portable_cuda_runtime()
+del _activate_portable_cuda_runtime
+
+__version__ = "0.0.4"

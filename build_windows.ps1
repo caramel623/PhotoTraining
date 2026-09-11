@@ -56,6 +56,7 @@ $pyiArgs += @(
     $mode,
     "--paths", $root,
     "--hidden-import", "vehicle_dataset_manager",
+    "--collect-all", "pip",
     "run.py"
 )
 

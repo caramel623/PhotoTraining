@@ -40,6 +40,13 @@ def test_build_pip_command_contains_url():
     assert "cu128" in cmd and "pip" in cmd and "torch" in cmd
 
 
+def test_build_pip_command_frozen_uses_internal_installer(monkeypatch):
+    monkeypatch.setattr(cuda_env, "is_frozen_app", lambda: True)
+    cmd = cuda_env.build_pip_command(cuda_wheel_index="cu126")
+    assert "下載/安裝" in cmd
+    assert "-m pip" not in cmd
+
+
 def test_build_pip_argv_extra_args():
     argv = cuda_env.build_pip_argv(cuda_wheel_index="cu126", extra_args=["--no-cache-dir"])
     assert "--no-cache-dir" in argv
@@ -171,3 +178,43 @@ def test_install_cuda_torch_uses_pip_index(tmp_path):
     assert "cu126-index" in captured
     # And the real builder still references the index:
     assert any("cu126" in tok for tok in argv)
+
+
+def test_frozen_install_uses_versioned_target_and_switches_after_success(
+    monkeypatch, tmp_path
+):
+    runtime_root = tmp_path / "cuda-runtime"
+    captured = {}
+
+    def fake_pip(args, line_cb=None):
+        captured["args"] = args
+        target = __import__("pathlib").Path(args[args.index("--target") + 1])
+        torch_dir = target / "torch"
+        torch_dir.mkdir(parents=True)
+        (torch_dir / "__init__.py").write_text("", encoding="utf-8")
+        return cuda_env.InstallResult(True, 0, "ok")
+
+    monkeypatch.setattr(cuda_env, "is_frozen_app", lambda: True)
+    monkeypatch.setattr(cuda_env, "cuda_runtime_root", lambda: runtime_root)
+    monkeypatch.setattr(cuda_env, "_run_pip_in_process", fake_pip)
+    result = cuda_env.install_cuda_torch("cu126")
+    assert result.success
+    assert "--no-deps" in captured["args"]
+    assert captured["args"][-1].endswith("/cu126")
+    active = (runtime_root / "active.txt").read_text(encoding="utf-8")
+    assert (runtime_root / "versions" / active / "torch" / "__init__.py").is_file()
+
+
+def test_frozen_install_failure_does_not_activate_partial_runtime(monkeypatch, tmp_path):
+    runtime_root = tmp_path / "cuda-runtime"
+    monkeypatch.setattr(cuda_env, "is_frozen_app", lambda: True)
+    monkeypatch.setattr(cuda_env, "cuda_runtime_root", lambda: runtime_root)
+    monkeypatch.setattr(
+        cuda_env,
+        "_run_pip_in_process",
+        lambda args, line_cb=None: cuda_env.InstallResult(False, 3, "failed"),
+    )
+    result = cuda_env.install_cuda_torch("cu126")
+    assert not result.success
+    assert not (runtime_root / "active.txt").exists()
+    assert list((runtime_root / "versions").iterdir()) == []

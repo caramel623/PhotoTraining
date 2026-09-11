@@ -5,22 +5,32 @@ When the user enables "Use CUDA" in Settings, this module lets the app:
 1. *Detect* the compute environment: is PyTorch present, is it a CPU or CUDA
    build, is an NVIDIA GPU / driver visible (``nvidia-smi``), and is CUDA
    actually usable right now.
-2. *Download / install* the matching CUDA build of PyTorch + torchvision with
-   ``pip`` (run in the current interpreter so the active venv is used),
-   streaming output line-by-line so the UI can show a live log.
+2. *Download / install* the matching CUDA build of PyTorch + torchvision.
+   Source runs use the active interpreter; frozen builds use bundled pip and
+   a versioned runtime beside the EXE. Output is streamed to the UI.
 
 The module is **Qt-free** and importable without the ML stack: torch is
-imported lazily and ``nvidia-smi`` / ``pip`` are invoked via ``subprocess``.
+imported lazily and NVIDIA probing is performed through ``nvidia-smi``.
 That keeps it fully unit-testable headlessly on machines without CUDA (e.g. the
 AMD dev box) and safe to call on any machine.
 """
 from __future__ import annotations
 
+import contextlib
+import io
+import shutil
 import subprocess
 import sys
+import uuid
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Callable, List, Optional
+
+from vehicle_dataset_manager.core.portable_runtime import (
+    cuda_runtime_root,
+    is_frozen_app,
+)
 
 from vehicle_dataset_manager.detection.device import (
     _torch,
@@ -131,7 +141,109 @@ def build_pip_command(
     extra_args: Optional[List[str]] = None,
 ) -> str:
     """Human/clipboard-friendly form of :func:`build_pip_argv`."""
+    if python is None and is_frozen_app():
+        return "使用本頁的下載/安裝按鈕；套件會安裝到程式資料夾的 cuda-runtime。"
     return " ".join(_shell_quote(tok) for tok in build_pip_argv(cuda_wheel_index, python, extra_args))
+
+
+def _portable_pip_args(cuda_wheel_index: Optional[str], target: Path) -> List[str]:
+    idx = _clean_cuda_index(cuda_wheel_index)
+    return [
+        "install",
+        "--upgrade",
+        "--no-deps",
+        "--target",
+        str(target),
+        "torch",
+        "torchvision",
+        "--index-url",
+        "https://download.pytorch.org/whl/" + idx,
+    ]
+
+
+class _PipOutput(io.TextIOBase):
+    def __init__(self, line_cb: Optional[Callable[[str], None]]) -> None:
+        self.line_cb = line_cb
+        self.lines: List[str] = []
+        self.buffer = ""
+
+    def writable(self) -> bool:
+        return True
+
+    def write(self, value: str) -> int:
+        text = str(value)
+        self.buffer += text
+        while "\n" in self.buffer:
+            line, self.buffer = self.buffer.split("\n", 1)
+            self._emit(line.rstrip("\r"))
+        return len(text)
+
+    def flush(self) -> None:
+        if self.buffer:
+            self._emit(self.buffer.rstrip("\r"))
+            self.buffer = ""
+
+    def _emit(self, line: str) -> None:
+        if not line:
+            return
+        self.lines.append(line)
+        if len(self.lines) > 200:
+            self.lines.pop(0)
+        if self.line_cb is not None:
+            self.line_cb(line)
+
+
+def _run_pip_in_process(
+    args: List[str],
+    line_cb: Optional[Callable[[str], None]] = None,
+) -> InstallResult:
+    output = _PipOutput(line_cb)
+    try:
+        from pip._internal.cli.main import main as pip_main
+    except Exception as exc:
+        message = "內建 pip 無法載入：" + str(exc)
+        if line_cb is not None:
+            line_cb(message)
+        return InstallResult(False, 127, message)
+    try:
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            code = int(pip_main(args) or 0)
+    except Exception as exc:
+        output.write("安裝器發生例外：" + str(exc))
+        code = 1
+    finally:
+        output.flush()
+    return InstallResult(code == 0, code, "\n".join(output.lines[-40:]))
+
+
+def install_portable_cuda_torch(
+    cuda_wheel_index: Optional[str] = None,
+    line_cb: Optional[Callable[[str], None]] = None,
+) -> InstallResult:
+    """Install a versioned CUDA runtime beside a frozen onedir app."""
+    runtime_root = cuda_runtime_root()
+    versions_dir = runtime_root / "versions"
+    target = versions_dir / ("cuda-" + uuid.uuid4().hex)
+    target.mkdir(parents=True, exist_ok=False)
+    result = _run_pip_in_process(
+        _portable_pip_args(cuda_wheel_index, target),
+        line_cb=line_cb,
+    )
+    if result.success and (target / "torch" / "__init__.py").is_file():
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        marker_tmp = runtime_root / "active.txt.tmp"
+        marker_tmp.write_text(target.name, encoding="utf-8")
+        marker_tmp.replace(runtime_root / "active.txt")
+        if line_cb is not None:
+            line_cb("CUDA runtime 已安裝；重新啟動程式後生效。")
+        return result
+    shutil.rmtree(target, ignore_errors=True)
+    if result.success:
+        message = "pip 回報成功，但安裝內容缺少 torch；未切換 runtime。"
+        if line_cb is not None:
+            line_cb(message)
+        return InstallResult(False, 1, message)
+    return result
 
 
 def probe_nvidia_smi(timeout: float = _NVIDIA_TIMEOUT) -> NvidiaInfo:
@@ -277,5 +389,7 @@ def install_cuda_torch(
 
     Thin wrapper over :func:`run_command` + :func:`build_pip_argv`.
     """
+    if python is None and is_frozen_app():
+        return install_portable_cuda_torch(cuda_wheel_index, line_cb=line_cb)
     argv = build_pip_argv(cuda_wheel_index, python, extra_args)
     return run_command(argv, line_cb=line_cb, timeout=timeout)

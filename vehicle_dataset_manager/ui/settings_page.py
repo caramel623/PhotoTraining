@@ -370,7 +370,6 @@ class SettingsPage(QWidget):
             if ok:
                 self.cuda_log.appendPlainText("[成功] 安裝完成。請重新啟動程式以載入 CUDA 版 PyTorch。")
                 self.device_info.setText("已安裝 CUDA 版 PyTorch（需重新啟動生效）")
-                self._detect()
             else:
                 self.cuda_log.appendPlainText("[失敗] pip 回傳碼：" + str(code))
                 tail = str(getattr(result, "output_tail", ""))
@@ -394,7 +393,7 @@ class SettingsPage(QWidget):
         self.cuda_log.appendPlainText("狀態：" + _STATUS_LABELS.get(report.status, report.status.value))
         self.cuda_log.appendPlainText(report.message)
         if report.pip_command:
-            self.cuda_log.appendPlainText("建議指令：" + report.pip_command)
+            self.cuda_log.appendPlainText("建議操作：" + report.pip_command)
 
 
 def _device_status(use_cuda: bool = False) -> str:
