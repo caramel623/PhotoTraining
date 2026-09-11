@@ -49,6 +49,8 @@ class ProjectPage(QWidget):
 
 
 def _gpu_info(use_cuda: bool = False) -> str:
+    if not use_cuda:
+        return "CPU mode (CUDA disabled)"
     from vehicle_dataset_manager.detection.device import gpu_report
 
-    return gpu_report(use_cuda)
+    return gpu_report(True)

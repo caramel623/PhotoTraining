@@ -16,6 +16,16 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $root
+$env:YOLO_CONFIG_DIR = Join-Path $root ".tmp\ultralytics-build"
+$env:YOLO_AUTOINSTALL = "false"
+New-Item -ItemType Directory -Force $env:YOLO_CONFIG_DIR | Out-Null
+
+# The Codex desktop runtime can add its bundled Poppler directory to PATH.
+# Its icuuc.dll has the same filename as the Windows ICU shim but exports a
+# different ABI, so PyInstaller must not resolve Qt6Core against that folder.
+$env:PATH = (($env:PATH -split ";") | Where-Object {
+    $_ -notmatch "[\\/]codex-primary-runtime[\\/]"
+}) -join ";"
 
 $py = Join-Path $root ".venv\Scripts\python.exe"
 if (-not (Test-Path $py)) {
@@ -36,16 +46,15 @@ if ($Clean) {
 
 $mode = if ($OneFile) { "--onefile" } else { "--onedir" }
 
-$pyiArgs = @(
-    "-m", "PyInstaller",
-    "--noconfirm",
-    "--clean",
+$pyiArgs = @("-m", "PyInstaller", "--noconfirm")
+if ($Clean) {
+    $pyiArgs += "--clean"
+}
+$pyiArgs += @(
     "--windowed",
     "--name", "VehicleDatasetManager",
     $mode,
     "--paths", $root,
-    "--collect-all", "PySide6",
-    "--collect-submodules", "cv2",
     "--hidden-import", "vehicle_dataset_manager",
     "run.py"
 )
@@ -57,10 +66,20 @@ if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller failed with exit code $LASTEXITCODE"
 }
 
+# A cached analysis from before PATH sanitization may still contain the
+# incompatible Poppler ICU files. Qt uses the Windows system ICU instead.
+if (-not $OneFile) {
+    $internalDir = Join-Path $root "dist\VehicleDatasetManager\_internal"
+    foreach ($strayIcu in @("icuuc.dll", "icudt78.dll")) {
+        Remove-Item -LiteralPath (Join-Path $internalDir $strayIcu) `
+            -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Write-Host ""
 Write-Host "Build complete." -ForegroundColor Green
 if ($OneFile) {
-    Write-Host "  dist\VehicleDatasetManager\VehicleDatasetManager.exe"
+    Write-Host "  dist\VehicleDatasetManager.exe"
 } else {
     Write-Host "  dist\VehicleDatasetManager\VehicleDatasetManager.exe"
 }

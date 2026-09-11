@@ -198,7 +198,7 @@ class SettingsPage(QWidget):
         self.mask_margin.setValue(s.mask.margin)
         self.use_cuda.setChecked(s.device.use_cuda)
         self.cuda_index.setText(s.device.cuda_wheel_index or cuda_env.DEFAULT_CUDA_WHEEL_INDEX)
-        self.device_info.setText(_device_status())
+        self.device_info.setText(_device_status(s.device.use_cuda))
         self.model_vehicle.setCurrentText(s.models.vehicle_detector)
         vm = s.models.vehicle_model
         existing = [self.model_vehicle_model.itemText(i) for i in range(self.model_vehicle_model.count())]
@@ -242,7 +242,7 @@ class SettingsPage(QWidget):
         s.reid.input_height = self.reid_input_height.value()
         self.ctx.save_settings()
         self.ctx.build_detectors()
-        self.device_info.setText(_device_status())
+        self.device_info.setText(_device_status(s.device.use_cuda))
         self._update_plate_status()
         QMessageBox.information(self, "Settings", "Saved.")
 
@@ -362,7 +362,9 @@ class SettingsPage(QWidget):
             self.cuda_log.appendPlainText("suggested: " + report.pip_command)
 
 
-def _device_status() -> str:
+def _device_status(use_cuda: bool = False) -> str:
+    if not use_cuda:
+        return "CPU mode (CUDA disabled; use Detect for environment details)"
     from vehicle_dataset_manager.detection.device import (
         cuda_available,
         gpu_name,

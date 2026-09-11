@@ -11,12 +11,6 @@ import sys
 from pathlib import Path
 
 from vehicle_dataset_manager import __version__
-from vehicle_dataset_manager.app_context import AppContext
-from vehicle_dataset_manager.core.config import AppSettings
-from vehicle_dataset_manager.core.logging import setup_logging
-from vehicle_dataset_manager.core.workspace import Workspace
-from vehicle_dataset_manager.database.connection import Database
-from vehicle_dataset_manager.workers.base import JobRunner
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -33,11 +27,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
 
-    # Resolve workspace + settings (settings may point at a different workspace).
-    initial_root = Path(args.workspace).expanduser() if args.workspace else None
-    pre_settings = AppSettings.load((initial_root or _default_root()) / "settings.json")
-    workspace = pre_settings.resolve_workspace()
-    settings = AppSettings.load(workspace.settings_path)
+    workspace, settings = resolve_startup_workspace(args.workspace)
+    from vehicle_dataset_manager.app_context import AppContext
+    from vehicle_dataset_manager.core.logging import setup_logging
+    from vehicle_dataset_manager.database.connection import Database
+    from vehicle_dataset_manager.workers.base import JobRunner
 
     loggers = setup_logging(workspace.logs_dir)
     app_log = loggers["app"]
@@ -46,9 +40,12 @@ def main(argv: list[str] | None = None) -> int:
     import os
 
     os.environ.setdefault("YOLO_CONFIG_DIR", str(workspace.root))
-    from vehicle_dataset_manager.detection.device import gpu_report
+    if settings.device.use_cuda:
+        from vehicle_dataset_manager.detection.device import gpu_report
 
-    app_log.info("device info:\n%s", gpu_report(settings.device.use_cuda))
+        app_log.info("device info:\n%s", gpu_report(True))
+    else:
+        app_log.info("device info: CPU mode (CUDA disabled)")
 
     # Qt must be constructed before the QThreadPool-based JobRunner.
     from PySide6.QtWidgets import QApplication
@@ -97,6 +94,21 @@ def _default_root() -> Path:
     from vehicle_dataset_manager.core.workspace import default_workspace_root
 
     return default_workspace_root()
+
+
+def resolve_startup_workspace(
+    workspace_arg: str | None,
+) -> tuple[object, object]:
+    """Resolve startup paths; an explicit CLI workspace always wins."""
+    from vehicle_dataset_manager.core.config import AppSettings
+    from vehicle_dataset_manager.core.workspace import Workspace
+
+    if workspace_arg:
+        workspace = Workspace(Path(workspace_arg).expanduser()).ensure()
+        return workspace, AppSettings.load(workspace.settings_path)
+    pre_settings = AppSettings.load(_default_root() / "settings.json")
+    workspace = pre_settings.resolve_workspace()
+    return workspace, AppSettings.load(workspace.settings_path)
 
 
 if __name__ == "__main__":
