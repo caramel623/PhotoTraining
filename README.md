@@ -881,7 +881,7 @@ Export
 
 請預設使用：
 
-Documents\VehicleDatasetManager
+程式所在資料夾（Windows 發行版中即 VehicleDatasetManager.exe 所在位置）
 
 但讓使用者自由選擇。
 

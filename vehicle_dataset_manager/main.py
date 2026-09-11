@@ -22,7 +22,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser._optionals.title = "選項"
     parser.add_argument("-h", "--help", action="help", help="顯示這份說明後結束")
     parser.add_argument("--workspace", type=str, default=None,
-                        help="工作區目錄（預設：Documents/VehicleDatasetManager）")
+                        help="工作區目錄（預設：程式所在資料夾）")
     parser.add_argument(
         "--version",
         action="version",
@@ -119,8 +119,10 @@ def resolve_startup_workspace(
     if workspace_arg:
         workspace = Workspace(Path(workspace_arg).expanduser()).ensure()
         return workspace, AppSettings.load(workspace.settings_path)
-    pre_settings = AppSettings.load(_default_root() / "settings.json")
-    workspace = pre_settings.resolve_workspace()
+    default_root = _default_root()
+    pre_settings = AppSettings.load(default_root / "settings.json")
+    root = pre_settings.paths.workspace or str(default_root)
+    workspace = Workspace(Path(root).expanduser()).ensure()
     return workspace, AppSettings.load(workspace.settings_path)
 
 

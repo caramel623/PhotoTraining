@@ -1,11 +1,12 @@
 """Workspace layout management.
 
-A Workspace is a plain folder (default ``%USERPROFILE%\\Documents\\VehicleDatasetManager``)
-that holds the database, extracted images, crops, logs, etc. Original archives
-are never modified. All derived artefacts are new files.
+A Workspace is a plain folder (the application directory by default) that
+holds the database, extracted images, crops, logs, etc. Original archives are
+never modified. All derived artefacts are new files.
 """
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,8 +29,15 @@ WORKSPACE_SUBDIRS = (
 
 
 def default_workspace_root() -> Path:
-    """Return the default workspace root under the user's Documents folder."""
-    return Path.home() / "Documents" / DEFAULT_WORKSPACE_NAME
+    """Return the portable default beside the running application.
+
+    PyInstaller sets sys.frozen and places sys.executable in the extracted
+    application folder. During source runs, use the repository root containing
+    the package instead.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[2]
 
 
 @dataclass

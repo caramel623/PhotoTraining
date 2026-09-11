@@ -17,10 +17,12 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QPlainTextEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -73,6 +75,16 @@ class SettingsPage(QWidget):
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
 
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setObjectName("settingsScrollArea")
+        self.scroll_area.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_content.setObjectName("settingsScrollContent")
+        content_layout = QVBoxLayout(scroll_content)
+        content_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self.scroll_area.setWidget(scroll_content)
+        root.addWidget(self.scroll_area, 1)
+
         paths = QGroupBox("路徑")
         pf = QFormLayout(paths)
         self.workspace_edit = QLineEdit()
@@ -83,7 +95,7 @@ class SettingsPage(QWidget):
         pf.addRow("壓縮檔目錄", self.archive_dir)
         pf.addRow("輸出目錄", self.output_dir)
         pf.addRow("暫存目錄", self.temp_dir)
-        root.addWidget(paths)
+        content_layout.addWidget(paths)
 
         proc = QGroupBox("處理設定")
         procf = QFormLayout(proc)
@@ -94,7 +106,7 @@ class SettingsPage(QWidget):
         procf.addRow("批次大小", self.batch_size)
         procf.addRow("工作執行緒數", self.worker_count)
         procf.addRow("信心門檻", self.conf_threshold)
-        root.addWidget(proc)
+        content_layout.addWidget(proc)
 
         device = QGroupBox("運算裝置（CPU／CUDA）")
         df = QFormLayout(device)
@@ -118,7 +130,7 @@ class SettingsPage(QWidget):
         self.cuda_log.setFixedHeight(120)
         self.cuda_log.setPlaceholderText("環境偵測與安裝日誌將顯示於此。")
         df.addRow(self.cuda_log)
-        root.addWidget(device)
+        content_layout.addWidget(device)
 
         ocr = QGroupBox("OCR")
         oc = QFormLayout(ocr)
@@ -132,7 +144,7 @@ class SettingsPage(QWidget):
         oc.addRow("Paddle 模型預設", self.ocr_preset)
         oc.addRow("背景程序狀態", self.ocr_status)
         oc.addRow("", self.btn_ocr_detect)
-        root.addWidget(ocr)
+        content_layout.addWidget(ocr)
 
         mask = QGroupBox("車牌遮罩")
         mf = QFormLayout(mask)
@@ -143,7 +155,7 @@ class SettingsPage(QWidget):
         self.mask_margin = QSpinBox(); self.mask_margin.setRange(0, 60)
         mf.addRow("處理方式", self.mask_method)
         mf.addRow("邊界（像素）", self.mask_margin)
-        root.addWidget(mask)
+        content_layout.addWidget(mask)
 
         models = QGroupBox("模型（可替換；none 代表停用）")
         modf = QFormLayout(models)
@@ -183,9 +195,9 @@ class SettingsPage(QWidget):
         modf.addRow("Re-ID ONNX 模型", self.reid_model_path)
         modf.addRow("Re-ID 輸入寬度", self.reid_input_width)
         modf.addRow("Re-ID 輸入高度", self.reid_input_height)
-        root.addWidget(models)
+        content_layout.addWidget(models)
 
-        root.addStretch(1)
+        content_layout.addStretch(1)
         bottom = QHBoxLayout()
         self.btn_save = QPushButton("儲存設定")
         bottom.addWidget(self.btn_save)
