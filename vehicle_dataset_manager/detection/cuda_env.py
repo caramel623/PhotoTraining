@@ -199,6 +199,8 @@ def _run_pip_in_process(
 ) -> InstallResult:
     output = _PipOutput(line_cb)
     try:
+        from vehicle_dataset_manager.services.frozen_pip import prepare_bundled_pip
+        prepare_bundled_pip()
         from pip._internal.cli.main import main as pip_main
     except Exception as exc:
         message = "內建 pip 無法載入：" + str(exc)

@@ -36,7 +36,7 @@ if (-not (Test-Path $py)) {
 }
 
 Write-Host "==> Ensuring dependencies" -ForegroundColor Cyan
-& $py -m pip install --upgrade pip
+& $py -m pip install "pip==26.2.1"
 & $py -m pip install -r requirements.txt
 & $py -m pip install pyinstaller
 

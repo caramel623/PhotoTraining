@@ -23,6 +23,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("-h", "--help", action="help", help="顯示這份說明後結束")
     parser.add_argument("--workspace", type=str, default=None,
                         help="工作區目錄（預設：程式所在資料夾）")
+    parser.add_argument("--check-installer", metavar="NEW_DIRECTORY",
+                        help="在全新目錄離線測試套件安裝器，不下載 CUDA 或讀取照片")
     parser.add_argument(
         "--version",
         action="version",
@@ -34,6 +36,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv if argv is not None else sys.argv[1:])
+    if args.check_installer:
+        from vehicle_dataset_manager.services.installer_check import check_installer
+        return check_installer(args.check_installer)
 
     workspace, settings = resolve_startup_workspace(args.workspace)
     from vehicle_dataset_manager.app_context import AppContext

@@ -39,6 +39,16 @@ Windows 本地車輛影像資料集建立與人工複核工具，提供繁體中
 
 若顯示「CPU 版 PyTorch」，有 NVIDIA GPU 也不代表 CUDA 已啟用。封裝版請使用設定頁的安裝按鈕，**不要執行 `VehicleDatasetManager.exe -m pip ...`**。
 
+v0.0.7 修正封裝版 `Unable to locate finder for 'pip._vendor.distlib'` 安裝錯誤。CUDA 套件仍另外下載，不預裝到發行 ZIP；使用新版重新按設定頁的下載／安裝按鈕即可。保留 pip 下載快取，已下載的相同套件有機會直接沿用；安裝完成仍需重啟程式。
+
+需要檢查安裝器時，可在 PowerShell 使用以下指令。目錄必須尚未存在；這只在指定目錄安裝兩次微型合成套件，不連線、不下載 CUDA、不讀取工作區照片：
+
+```powershell
+& ".\VehicleDatasetManager.exe" --check-installer "E:\VDM-Installer-Check"
+```
+
+完成後檢查該目錄的 `report.json`，兩筆 `success` 應為 `true`。這能驗證封裝版 pip 及 Windows 啟動器資源，不代表已驗證 GPU 運算。
+
 車牌權重授權與來源見 [MODEL_LICENSE.txt](models/MODEL_LICENSE.txt)。權重放入發行 ZIP，但不提交到 Git 原始碼。A5000 的實際 GPU 加速仍需在目標電腦驗證；本專案測試不代表已完成所有顯示卡的相容性驗證。
 
 ## 3. 匯入照片與 INI
@@ -208,4 +218,4 @@ py -m venv .venv
 
 建置需要本機已授權的台灣車牌模型。可用 `VDM_PLATE_MODEL_SOURCE` 指定來源；腳本會核對 SHA256。不要使用 `-OneFile` 製作本專案的標準發行包。
 
-目前版本 **v0.0.6**：INI 結構化解析、多來源追蹤、解析器版本感知重掃、逐影像交易續跑、人工資料保護與衝突複核入口。詳細驗證與限制見 [交接文件](HANDOFF_2026-09-12_INI.md)。
+目前版本 **v0.0.7**：修正封裝版 CUDA 下載安裝器，新增真正套件安裝的離線診斷。保留 v0.0.6 的 INI 結構化解析、增量重掃、人工資料保護與衝突複核。詳見 [CUDA 安裝器交接](HANDOFF_2026-09-12_CUDA_INSTALLER.md) 與 [INI 交接](HANDOFF_2026-09-12_INI.md)。
