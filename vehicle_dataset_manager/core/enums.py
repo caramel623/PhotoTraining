@@ -44,6 +44,7 @@ class GroupVerification(_StrEnum):
 
 
 class GroupSource(_StrEnum):
+    PLATE_INI_EXACT = "plate_ini_exact"
     PLATE_EXACT = "plate_exact"
     PLATE_FUZZY = "plate_fuzzy"
     MANUAL = "manual"

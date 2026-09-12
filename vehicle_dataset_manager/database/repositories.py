@@ -79,6 +79,9 @@ class ImageRecord:
     processing_status: str
     review_status: str
     plate_text_normalized: Optional[str]
+    plate_source: str = "unknown"
+    ini_plate_text: Optional[str] = None
+    ocr_plate_text: Optional[str] = None
     quality_flags: list = field(default_factory=list)
 
 
@@ -94,6 +97,7 @@ class ImageRepository:
         original_archive: Optional[str] = None,
         archive_year: Optional[int] = None,
         camera_id: Optional[str] = None,
+        sha256: Optional[str] = None,
     ) -> int:
         """Insert a freshly-scanned image as PENDING, or return the existing id.
 
@@ -106,10 +110,9 @@ class ImageRepository:
             INSERT INTO images (
                 original_filename, source_path, original_archive, archive_year,
                 camera_id, processing_status, review_status, quality_flags,
-                created_at, updated_at
-            ) VALUES (?,?,?,?,?, 'pending', 'unreviewed', '[]', ?, ?)
-            ON CONFLICT (source_path, original_filename) DO UPDATE SET
-                updated_at = excluded.updated_at
+                sha256, created_at, updated_at
+            ) VALUES (?,?,?,?,?, 'pending', 'unreviewed', '[]', ?, ?, ?)
+            ON CONFLICT (source_path, original_filename) DO NOTHING
             """,
             (
                 original_filename,
@@ -117,12 +120,11 @@ class ImageRepository:
                 original_archive,
                 archive_year,
                 camera_id,
+                sha256,
                 ts,
                 ts,
             ),
         )
-        if cur.lastrowid:
-            return int(cur.lastrowid)
         row = self.db.query_one(
             "SELECT image_id FROM images WHERE source_path=? AND original_filename=?",
             (source_path, original_filename),
@@ -161,12 +163,25 @@ class ImageRepository:
             (source_path, original_filename),
         )
         return self.get(int(row['image_id'])) if row else None
+
+    def get_by_sha256(self, sha256: str) -> Optional[ImageRecord]:
+        row = self.db.query_one(
+            "SELECT image_id FROM images WHERE sha256=? ORDER BY image_id LIMIT 1",
+            (sha256,),
+        )
+        return self.get(int(row["image_id"])) if row else None
+
+    def get_details(self, image_id: int) -> Optional[dict]:
+        row = self.db.query_one("SELECT * FROM images WHERE image_id=?", (image_id,))
+        return dict(row) if row else None
+
     def get(self, image_id: int) -> Optional[ImageRecord]:
         row = self.db.query_one(
             """
             SELECT image_id, original_filename, original_archive, archive_year,
                    source_path, camera_id, processing_status, review_status,
-                   plate_text_normalized, quality_flags
+                   plate_text_normalized, plate_source, ini_plate_text,
+                   ocr_plate_text, quality_flags
             FROM images WHERE image_id=?
             """,
             (image_id,),
@@ -184,6 +199,9 @@ class ImageRepository:
             processing_status=row["processing_status"],
             review_status=row["review_status"],
             plate_text_normalized=row["plate_text_normalized"],
+            plate_source=row["plate_source"],
+            ini_plate_text=row["ini_plate_text"],
+            ocr_plate_text=row["ocr_plate_text"],
             quality_flags=_loads(row["quality_flags"], []),
         )
 
@@ -210,6 +228,14 @@ class ImageRepository:
             "device_serial", "sha256", "perceptual_hash",
             "width", "height", "error", "vehicle_crop_path",
             "vehicle_crop_bbox",
+            "ini_present", "ini_path", "ini_archive_member", "ini_parse_status",
+            "ini_encoding", "ini_raw_metadata", "ini_plate_text", "ini_sha256",
+            "ini_parser_version", "manual_plate_text", "ocr_plate_text",
+            "ocr_plate_normalized", "plate_source", "plate_validation_status",
+            "label_confidence", "label_trust_level", "metadata_conflict",
+            "conflict_type", "certificate_id", "image_sequence", "operator_name",
+            "direction_text", "direction_code", "violation_type", "amount",
+            "vehicle_type_code", "violation_code", "vehicle_speed",
         }
         cols = []
         vals: list[Any] = []
@@ -341,8 +367,9 @@ class VehicleRepository:
         maps to the same candidate vehicle group.
         """
         row = self.db.query_one(
-            "SELECT vehicle_id FROM vehicles WHERE plate_normalized=? COLLATE NOCASE",
-            (plate_normalized,),
+            "SELECT vehicle_id FROM vehicles WHERE plate_normalized=? COLLATE NOCASE "
+            "AND (?='manual' OR (verification='automatic_only' AND source NOT IN ('manual','mixed'))) ORDER BY vehicle_id",
+            (plate_normalized, str(source)),
         )
         if row:
             return row["vehicle_id"]
@@ -366,6 +393,30 @@ class VehicleRepository:
         label_source: str = "plate_exact",
         confidence: Optional[float] = None,
     ) -> None:
+        if label_source != "manual":
+            memberships = self.db.query(
+                """
+                SELECT m.vehicle_id, m.label_source, v.verification, v.source
+                FROM vehicle_members m JOIN vehicles v ON v.vehicle_id=m.vehicle_id
+                WHERE m.image_id=?
+                """,
+                (image_id,),
+            )
+            protected = any(
+                  row["label_source"] == "manual"
+                  or row["source"] in ("manual", "mixed")
+                or row["verification"] != GroupVerification.AUTOMATIC_ONLY.value
+                for row in memberships
+            )
+            image = self.db.query_one("SELECT review_status, manual_plate_text, metadata_conflict FROM images WHERE image_id=?", (image_id,))
+            if protected or (image and (image["review_status"] != "unreviewed" or image["manual_plate_text"] or image["metadata_conflict"])):
+                return
+            for row in memberships:
+                if row["vehicle_id"] != vehicle_id:
+                    self.db.execute(
+                        "DELETE FROM vehicle_members WHERE vehicle_id=? AND image_id=?",
+                        (row["vehicle_id"], image_id),
+                    )
         self.db.execute(
             """
             INSERT INTO vehicle_members (vehicle_id, image_id, label_source, confidence, created_at)
@@ -412,7 +463,13 @@ class VehicleRepository:
             SELECT m.image_id, m.label_source, m.confidence,
                    i.original_filename, i.source_path, i.vehicle_crop_path,
                    i.camera_id, i.date, i.plate_text_normalized,
-                   i.review_status, i.processing_status
+                   i.review_status, i.processing_status, i.ini_plate_text,
+                   i.ocr_plate_text, i.plate_text_raw AS effective_plate_text,
+                   i.plate_source, i.plate_validation_status,
+                   i.ini_encoding, i.ini_parse_status, i.location, i.time,
+                   i.direction_text, i.direction_code, i.vehicle_speed,
+                   i.speed_limit, i.vehicle_type_code, i.violation_code,
+                   i.image_sequence, i.metadata_conflict, i.conflict_type
             FROM vehicle_members m
             JOIN images i ON i.image_id = m.image_id
             WHERE m.vehicle_id=?
@@ -494,7 +551,7 @@ class VehicleRepository:
                 "DELETE FROM vehicles WHERE vehicle_id=?", (source_id,)
             )
             self.db.execute(
-                "UPDATE vehicles SET label_priority=?, updated_at=? WHERE vehicle_id=?",
+                "UPDATE vehicles SET source='manual', label_priority=?, updated_at=? WHERE vehicle_id=?",
                 (_best_label_priority(src.get("label_priority"), tgt.get("label_priority")),
                  _now(), target_id),
             )
@@ -538,6 +595,7 @@ class VehicleRepository:
                 f"DELETE FROM vehicle_members WHERE vehicle_id=? AND image_id IN ({ph})",
                 (vehicle_id, *ids),
             )
+            self.db.execute("UPDATE vehicles SET source='manual' WHERE vehicle_id=?", (vehicle_id,))
             self.db.commit()
         return new_id
 
@@ -777,6 +835,9 @@ class ExportRepository:
                    i.captured_datetime, i.date, i.time, i.vehicle_type,
                    i.speed, i.direction, i.plate_text_raw,
                    i.plate_text_normalized, i.plate_confidence,
+                   i.plate_source, i.plate_validation_status,
+                   i.vehicle_type_code, i.image_sequence,
+                   i.ini_present, i.ini_parse_status,
                    i.vehicle_bbox, i.vehicle_crop_bbox, i.plate_bbox,
                    i.review_status, i.quality_flags, i.sha256,
                    i.width, i.height, i.vehicle_crop_path, i.updated_at,

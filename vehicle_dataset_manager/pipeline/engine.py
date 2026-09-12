@@ -11,6 +11,7 @@ drives it from a QThread/QRunnable (see :mod:`workers`).
 from __future__ import annotations
 
 import logging
+import json
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +28,7 @@ from vehicle_dataset_manager.database.repositories import (
 )
 from vehicle_dataset_manager.database.connection import Database
 from vehicle_dataset_manager.pipeline.stages import PipelineContext, Stage, StageError
+from vehicle_dataset_manager.services.metadata_resolver import MetadataResolver
 
 log = logging.getLogger("vdm.processing")
 err = logging.getLogger("vdm.error")
@@ -77,6 +79,8 @@ class ProcessingEngine:
         job = self.jobs.get(job_id)
         if job is None:
             raise ValueError(f"unknown job_id {job_id}")
+        if job.get("job_type") == "metadata_rescan":
+            return EngineResult(job_id=job_id)
         self.jobs.set_state(job_id, JobState.RUNNING)
         archive_path = job.get("archive_path")
         result = EngineResult(job_id=job_id)
@@ -187,6 +191,12 @@ class ProcessingEngine:
         )
         try:
             for stage in self.stages:
+                if stage.name == "grouping":
+                    stored = self.images.get_details(image_id) or {}
+                    if stored.get("metadata_conflict") or stored.get("manual_plate_text"):
+                        continue
+                    if stored.get("ini_present"):
+                        ctx.meta["ini_plate_normalized"] = stored.get("plate_text_normalized") if stored.get("plate_source") == "ini" else None
                 stage.run(ctx)
             self._persist(ctx)
             result.processed += 1
@@ -244,12 +254,35 @@ class ProcessingEngine:
         if ctx.plate_bbox:
             fields["plate_bbox"] = ctx.plate_bbox
         if ctx.plate_raw is not None:
-            fields["plate_text_raw"] = ctx.plate_raw
+            fields["ocr_plate_text"] = ctx.plate_raw
         if ctx.plate_norm is not None:
-            fields["plate_text_normalized"] = ctx.plate_norm
+            fields["ocr_plate_normalized"] = ctx.plate_norm
         if ctx.plate_confidence is not None:
             fields["plate_confidence"] = ctx.plate_confidence
+        current = self.images.get_details(ctx.image_id) or {}
+        fields["quality_flags"] = sorted(set(json.loads(current.get("quality_flags") or "[]") + ctx.quality_flags))
+        if current.get("ini_present"):
+            for key in ("camera_id", "date", "time", "captured_datetime", "speed", "speed_limit", "direction", "location", "device_serial"):
+                if current.get(key) is not None:
+                    fields[key] = current[key]
+        resolved = MetadataResolver.resolve_plate(
+            manual_plate=current.get("manual_plate_text"),
+            ini_plate=(current.get("ini_plate_text") if current.get("plate_source") in ("ini", "manual") else None) if current.get("ini_present") else meta.get("ini_plate_normalized"),
+            ocr_plate=ctx.plate_raw or current.get("ocr_plate_text"),
+            ocr_confidence=ctx.plate_confidence or current.get("plate_confidence"),
+        )
+        fields.update(
+            plate_text_raw=resolved.raw, plate_text_normalized=resolved.normalized,
+            plate_source=resolved.source,
+            plate_validation_status=resolved.validation_status,
+            label_confidence=resolved.confidence,
+            label_trust_level=resolved.trust_level,
+            metadata_conflict=int(resolved.conflict),
+            conflict_type=resolved.conflict_type,
+        )
 
+        if current.get("metadata_conflict"):
+            fields.update(metadata_conflict=1, conflict_type=current.get("conflict_type"))
         self.images.mark_completed(ctx.image_id, **fields)
 
         # child rows

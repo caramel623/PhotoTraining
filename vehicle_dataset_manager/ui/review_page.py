@@ -134,6 +134,7 @@ class ReviewPage(QWidget):
         self.group_filter.addItem("僅自動判定", "automatic_only")
         self.group_filter.addItem("部分已複核", "partially_verified")
         self.group_filter.addItem("已確認", "verified")
+        self.group_filter.addItem("INI／OCR 衝突佇列（含未分組影像）", "metadata_conflicts")
         toolbar.addWidget(self.group_filter)
         toolbar.addSpacing(16)
         toolbar.addWidget(QLabel("影像"))
@@ -178,6 +179,11 @@ class ReviewPage(QWidget):
         for button in (self.btn_confirm, self.btn_merge, self.btn_split, self.btn_edit):
             summary_row.addWidget(button)
         right_layout.addLayout(summary_row)
+        self.image_metadata_label = QLabel("請選擇影像以查看 INI／OCR 標籤來源。")
+        self.image_metadata_label.setObjectName("reviewImageMetadata")
+        self.image_metadata_label.setWordWrap(True)
+        self.image_metadata_label.setTextFormat(Qt.PlainText)
+        right_layout.addWidget(self.image_metadata_label)
 
         self.image_list = QListWidget()
         self.image_list.setObjectName("reviewImageGrid")
@@ -333,7 +339,10 @@ class ReviewPage(QWidget):
             item = QListWidgetItem(placeholder, "\n".join(details))
             item.setData(IMAGE_ROLE, image.image_id)
             item.setToolTip(
-                f"影像 ID：{image.image_id}\n車牌：{image.plate_text_normalized or '-'}\n"
+                f"影像 ID：{image.image_id}\nINI 車牌：{image.ini_plate_text or '-'}\n"
+                f"OCR 車牌：{image.ocr_plate_text or '-'}\n"
+                f"有效車牌：{image.effective_plate_text or image.plate_text_normalized or '-'}\n"
+                f"來源：{image.plate_source}\n驗證：{image.plate_validation_status}\n"
                 f"信心值：{image.confidence if image.confidence is not None else '-'}\n"
                 f"路徑：{image.display_path or '（檔案不存在）'}"
             )
@@ -371,6 +380,36 @@ class ReviewPage(QWidget):
         self, current: Optional[QListWidgetItem], _previous: Optional[QListWidgetItem]
     ) -> None:
         self._selection.image_id = current.data(IMAGE_ROLE) if current else None
+        image = next((item for item in self._images if item.image_id == self._selection.image_id), None)
+        if image is None:
+            self.image_metadata_label.setText("請選擇影像以查看 INI／OCR 標籤來源。")
+        else:
+            warning = " ⚠ " + (image.conflict_type or image.plate_validation_status) if image.metadata_conflict or image.plate_validation_status == "OCR_MISMATCH" else ""
+            self.image_metadata_label.setText(
+                f"INI 車牌：{image.ini_plate_text or '-'}　OCR 車牌：{image.ocr_plate_text or '-'}　"
+                f"有效車牌：{image.effective_plate_text or image.plate_text_normalized or '-'}　"
+                f"來源：{image.plate_source}　驗證：{image.plate_validation_status}" + warning
+            )
+            details = self.model.images.get_details(image.image_id) or {}
+            metadata = "　".join(
+                f"{label}：{details.get(key) if details.get(key) is not None else '-'}"
+                for key, label in (
+                    ("date", "日期"), ("time", "時間"), ("camera_id", "主機"),
+                    ("location", "地點"), ("image_sequence", "序號"),
+                    ("vehicle_speed", "車速"), ("speed_limit", "速限"),
+                    ("direction_text", "方向"), ("direction_code", "方向代碼"),
+                    ("vehicle_type_code", "車種"), ("violation_code", "違規"),
+                    ("ini_encoding", "編碼"), ("ini_parse_status", "解析"),
+                )
+            )
+            self.image_metadata_label.setText(self.image_metadata_label.text() + "\n" + metadata)
+            sources = self.model.images.db.query(
+                "SELECT a.archive_filename,s.member_path,s.raw_metadata FROM ini_sources s "
+                "JOIN archives a ON a.archive_id=s.archive_id WHERE s.image_id=?", (image.image_id,)
+            )
+            self.image_metadata_label.setToolTip("\n\n".join(
+                f"{row['archive_filename']} / {row['member_path']}\n{row['raw_metadata']}" for row in sources
+            ))
         self._update_actions()
 
     def _selected_image_ids(self) -> list[int]:
@@ -386,13 +425,14 @@ class ReviewPage(QWidget):
             return
         for image_id in image_ids:
             self.model.set_image_status(image_id, status, vehicle_id=vehicle_id)
-        self.model.sync_verification(vehicle_id)
+        if vehicle_id != "__metadata__":
+            self.model.sync_verification(vehicle_id)
         self._selection.image_id = image_ids[-1]
         self.refresh_groups(select_vehicle=vehicle_id)
 
     def _confirm_group(self) -> None:
         vehicle_id = self._selection.vehicle_id
-        if not vehicle_id:
+        if not vehicle_id or vehicle_id == "__metadata__":
             return
         if QMessageBox.question(
             self,
@@ -430,7 +470,7 @@ class ReviewPage(QWidget):
 
     def _merge_group(self) -> None:
         source = self._selection.vehicle_id
-        if not source:
+        if not source or source == "__metadata__":
             return
         choices = [
             f"{g.vehicle_id} — {g.plate_normalized or '（無車牌）'}"
@@ -461,6 +501,8 @@ class ReviewPage(QWidget):
 
     def _split_selected(self) -> None:
         vehicle_id = self._selection.vehicle_id
+        if vehicle_id == "__metadata__":
+            return
         image_ids = self._selected_image_ids()
         if not vehicle_id or not image_ids:
             QMessageBox.information(self, "拆分", "請先選取一張或多張影像。")
@@ -501,7 +543,7 @@ class ReviewPage(QWidget):
         self.review_progress_label.setText(f"已複核 {reviewed}／{total}")
 
     def _update_actions(self) -> None:
-        has_group = bool(self._selection.vehicle_id)
+        has_group = bool(self._selection.vehicle_id) and self._selection.vehicle_id != "__metadata__"
         has_image = bool(self._selected_image_ids())
         for button in (self.btn_confirm, self.btn_merge):
             button.setEnabled(has_group)
@@ -514,6 +556,9 @@ class ReviewPage(QWidget):
             self.btn_excluded,
         ):
             button.setEnabled(has_group and has_image)
+        self.btn_edit.setEnabled(has_image)
+        self.btn_uncertain.setEnabled(has_image)
+        self.btn_excluded.setEnabled(has_image)
 
     def _clear_group(self) -> None:
         self._thumb_generation += 1

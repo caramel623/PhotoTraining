@@ -34,6 +34,9 @@ _IMAGE_FIELDS = (
     "image_id", "vehicle_id", "original_filename", "archive_year", "date",
     "time", "camera_id", "vehicle_type", "review_status", "verification",
     "label_priority", "label_source", "plate_normalized", "plate_confidence",
+    "plate_effective", "plate_source", "plate_validation_status",
+    "direction", "vehicle_type_code", "image_sequence",
+    "ini_present", "ini_parse_status",
     "sha256", "original_image", "vehicle_crop", "plate_crop", "reid_crop",
     "plate_mask_bbox", "source_updated_at", "split",
 )
@@ -315,6 +318,14 @@ class DatasetExporter:
                 row.get("plate_text_normalized")
                 or row.get("group_plate_normalized")
             ),
+            "plate_effective": row.get("plate_text_raw"),
+            "plate_source": row.get("plate_source") or "unknown",
+            "plate_validation_status": row.get("plate_validation_status") or "unknown",
+            "direction": row.get("direction"),
+            "vehicle_type_code": row.get("vehicle_type_code"),
+            "image_sequence": row.get("image_sequence"),
+            "ini_present": int(bool(row.get("ini_present"))),
+            "ini_parse_status": row.get("ini_parse_status") or "missing",
             "plate_confidence": row.get("plate_confidence"),
             "sha256": row.get("sha256"),
             "original_image": original_relative,

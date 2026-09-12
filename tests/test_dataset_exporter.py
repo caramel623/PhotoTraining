@@ -125,6 +125,11 @@ def test_dataset_exporter_writes_complete_portable_tree(db, tmp_path):
     assert str(tmp_path) not in json.dumps(records)
     assert all(record["plate_mask_bbox"] for record in records)
     assert all(record["vehicle_id"].startswith("Vehicle_") for record in records)
+    assert all(
+        {"plate_effective", "plate_source", "plate_validation_status",
+         "image_sequence", "ini_present", "ini_parse_status"} <= set(record)
+        for record in records
+    )
 
     reid = cv2.imread(str(output / records[0]["reid_crop"]))
     assert reid is not None

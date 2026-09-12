@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 
-_CURRENT_VERSION = 4
+_CURRENT_VERSION = 5
 
 #: Ordered migrations. Each entry is a list of SQL statements.
 _MIGRATIONS: list[list[str]] = [
@@ -189,6 +189,123 @@ _MIGRATIONS: list[list[str]] = [
     [
         "ALTER TABLE images ADD COLUMN vehicle_crop_bbox TEXT",
     ],
+    [
+        "ALTER TABLE images ADD COLUMN ini_present INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE images ADD COLUMN ini_path TEXT",
+        "ALTER TABLE images ADD COLUMN ini_archive_member TEXT",
+        "ALTER TABLE images ADD COLUMN ini_parse_status TEXT NOT NULL DEFAULT 'missing'",
+        "ALTER TABLE images ADD COLUMN ini_encoding TEXT",
+        "ALTER TABLE images ADD COLUMN ini_raw_metadata TEXT",
+        "ALTER TABLE images ADD COLUMN ini_plate_text TEXT",
+        "ALTER TABLE images ADD COLUMN ini_sha256 TEXT",
+        "ALTER TABLE images ADD COLUMN ini_parser_version INTEGER",
+        "ALTER TABLE images ADD COLUMN manual_plate_text TEXT",
+        "ALTER TABLE images ADD COLUMN ocr_plate_text TEXT",
+        "ALTER TABLE images ADD COLUMN ocr_plate_normalized TEXT",
+        "ALTER TABLE images ADD COLUMN plate_source TEXT NOT NULL DEFAULT 'unknown'",
+        "ALTER TABLE images ADD COLUMN plate_validation_status TEXT NOT NULL DEFAULT 'unknown'",
+        "ALTER TABLE images ADD COLUMN label_confidence REAL",
+        "ALTER TABLE images ADD COLUMN label_trust_level TEXT",
+        "ALTER TABLE images ADD COLUMN metadata_conflict INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE images ADD COLUMN conflict_type TEXT",
+        "ALTER TABLE images ADD COLUMN certificate_id TEXT",
+        "ALTER TABLE images ADD COLUMN image_sequence TEXT",
+        "ALTER TABLE images ADD COLUMN operator_name TEXT",
+        "ALTER TABLE images ADD COLUMN direction_text TEXT",
+        "ALTER TABLE images ADD COLUMN direction_code TEXT",
+        "ALTER TABLE images ADD COLUMN violation_type TEXT",
+        "ALTER TABLE images ADD COLUMN amount TEXT",
+        "ALTER TABLE images ADD COLUMN vehicle_type_code TEXT",
+        "ALTER TABLE images ADD COLUMN violation_code TEXT",
+        "ALTER TABLE images ADD COLUMN vehicle_speed REAL",
+        """
+        CREATE TABLE IF NOT EXISTS archives (
+            archive_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            archive_path TEXT NOT NULL UNIQUE,
+            archive_filename TEXT NOT NULL,
+            file_size INTEGER,
+            mtime_ns INTEGER,
+            sha256 TEXT,
+            last_scanned_at TEXT,
+            parser_version INTEGER,
+            import_version TEXT,
+            duplicate_of_archive_id INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (duplicate_of_archive_id) REFERENCES archives (archive_id)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_archives_sha ON archives (sha256)",
+        """
+        CREATE TABLE IF NOT EXISTS archive_members (
+            member_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            archive_id INTEGER NOT NULL,
+            member_path TEXT NOT NULL,
+            member_type TEXT NOT NULL,
+            size INTEGER,
+            sha256 TEXT,
+            last_seen_at TEXT NOT NULL,
+            UNIQUE (archive_id, member_path),
+            FOREIGN KEY (archive_id) REFERENCES archives (archive_id) ON DELETE CASCADE
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS image_sources (
+            source_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            image_id INTEGER NOT NULL,
+            archive_id INTEGER NOT NULL,
+            member_path TEXT NOT NULL,
+            first_seen_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL,
+            UNIQUE (image_id, archive_id, member_path),
+            FOREIGN KEY (image_id) REFERENCES images (image_id) ON DELETE CASCADE,
+            FOREIGN KEY (archive_id) REFERENCES archives (archive_id) ON DELETE CASCADE
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS import_jobs (
+            import_job_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            archive_id INTEGER NOT NULL,
+            mode TEXT NOT NULL,
+            status TEXT NOT NULL,
+            images_found INTEGER NOT NULL DEFAULT 0,
+            images_new INTEGER NOT NULL DEFAULT 0,
+            images_existing INTEGER NOT NULL DEFAULT 0,
+            ini_found INTEGER NOT NULL DEFAULT 0,
+            ini_new INTEGER NOT NULL DEFAULT 0,
+            ini_existing INTEGER NOT NULL DEFAULT 0,
+            ini_matched INTEGER NOT NULL DEFAULT 0,
+            ini_missing INTEGER NOT NULL DEFAULT 0,
+            ini_parse_error INTEGER NOT NULL DEFAULT 0,
+            ini_with_plate INTEGER NOT NULL DEFAULT 0,
+            ini_without_plate INTEGER NOT NULL DEFAULT 0,
+            unmatched_ini INTEGER NOT NULL DEFAULT 0,
+            metadata_updated INTEGER NOT NULL DEFAULT 0,
+            conflicts INTEGER NOT NULL DEFAULT 0,
+            errors INTEGER NOT NULL DEFAULT 0,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            message TEXT,
+            FOREIGN KEY (archive_id) REFERENCES archives (archive_id) ON DELETE CASCADE
+        )
+        """,
+        """CREATE TABLE ini_sources (
+            image_id INTEGER NOT NULL REFERENCES images(image_id),
+            archive_id INTEGER NOT NULL REFERENCES archives(archive_id),
+            member_path TEXT NOT NULL,
+            sha256 TEXT NOT NULL,
+            parser_version INTEGER NOT NULL,
+            parse_status TEXT NOT NULL,
+            raw_metadata TEXT NOT NULL,
+            plate_text TEXT,
+            PRIMARY KEY(image_id,archive_id,member_path)
+        )""",
+        "UPDATE images SET ocr_plate_text=plate_text_raw, "
+        "ocr_plate_normalized=plate_text_normalized, "
+        "plate_source=CASE WHEN plate_text_normalized IS NULL THEN 'unknown' ELSE 'ocr' END",
+        "UPDATE images SET manual_plate_text=COALESCE(plate_text_raw,plate_text_normalized), plate_source='manual' "
+        "WHERE image_id IN (SELECT image_id FROM vehicle_members WHERE label_source='manual')",
+    ],
 ]
 
 def _get_version(conn: sqlite3.Connection) -> int:
@@ -209,7 +326,12 @@ def migrate(conn: sqlite3.Connection) -> int:
         statements = _MIGRATIONS[idx]
         try:
             for stmt in statements:
-                conn.execute(stmt)
+                if stmt.lstrip().upper().startswith("PRAGMA"):
+                    conn.execute(stmt)
+            conn.execute("BEGIN")
+            for stmt in statements:
+                if not stmt.lstrip().upper().startswith("PRAGMA"):
+                    conn.execute(stmt)
             conn.execute(
                 "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
                 (target_version, _now()),

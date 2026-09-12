@@ -22,7 +22,7 @@ from typing import Callable, List, Optional
 import cv2
 import numpy as np
 
-from vehicle_dataset_manager.core.enums import OcrQuality
+from vehicle_dataset_manager.core.enums import GroupSource, OcrQuality
 from vehicle_dataset_manager.detection.base import BaseDetector, Detection
 from vehicle_dataset_manager.ocr.base import BaseOcr
 from vehicle_dataset_manager.ocr.paddle_client import PaddleOcrError
@@ -183,13 +183,24 @@ class GroupingStage(Stage):
         self.min_quality = min_quality
 
     def run(self, ctx: PipelineContext) -> None:
-        if not ctx.plate_norm or ctx.ocr_quality is OcrQuality.UNKNOWN:
+        ini_plate = normalize_plate(ctx.meta.get("ini_plate_normalized"))
+        effective_plate = ini_plate or ctx.plate_norm
+        effective_quality = OcrQuality.HIGH if ini_plate else ctx.ocr_quality
+        if not effective_plate or effective_quality is OcrQuality.UNKNOWN:
             return
         order = (OcrQuality.LOW, OcrQuality.MEDIUM, OcrQuality.HIGH)
-        if order.index(ctx.ocr_quality) < order.index(self.min_quality):
+        if order.index(effective_quality) < order.index(self.min_quality):
             return
-        vid = self.get_or_create(ctx.plate_norm)
-        self.add_member(vid, ctx.image_id, "plate_exact", ctx.plate_confidence)
+        if ini_plate:
+            try:
+                vid = self.get_or_create(effective_plate, source=GroupSource.PLATE_INI_EXACT)
+            except TypeError:
+                vid = self.get_or_create(effective_plate)
+            label_source, confidence = "plate_ini_exact", 1.0
+        else:
+            vid = self.get_or_create(effective_plate)
+            label_source, confidence = "plate_exact", ctx.plate_confidence
+        self.add_member(vid, ctx.image_id, label_source, confidence)
         ctx.vehicle_group_id = vid
 
 
@@ -228,7 +239,7 @@ class VehicleCropStage(Stage):
             if x2 <= x1 or y2 <= y1:
                 continue
             crop = ctx.bgr[y1:y2, x1:x2]
-            out = self.crops_dir / f"{stem}_v{i}.jpg"
+            out = self.crops_dir / f"{ctx.image_id}_{stem}_v{i}.jpg"
             if cv2.imwrite(str(out), crop, [int(cv2.IMWRITE_JPEG_QUALITY), self.quality]):
                 saved.append(str(out))
                 if i == 0:

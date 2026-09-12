@@ -17,6 +17,7 @@ from vehicle_dataset_manager.core.enums import (
     ReviewStatus,
 )
 from vehicle_dataset_manager.services.plate import normalize_plate
+from vehicle_dataset_manager.services.metadata_resolver import MetadataResolver
 
 
 @dataclass
@@ -40,6 +41,15 @@ class GroupImage:
     camera_id: Optional[str] = None
     date: Optional[str] = None
     confidence: Optional[float] = None
+    ini_plate_text: Optional[str] = None
+    ocr_plate_text: Optional[str] = None
+    effective_plate_text: Optional[str] = None
+    plate_source: str = "unknown"
+    plate_validation_status: str = "unknown"
+    ini_encoding: Optional[str] = None
+    ini_parse_status: str = "missing"
+    metadata_conflict: bool = False
+    conflict_type: Optional[str] = None
 
 
 def _resolve_display_path(crop_path: Optional[str], source_path: Optional[str]) -> Optional[str]:
@@ -61,6 +71,9 @@ class ReviewModel:
 
     # -- read ------------------------------------------------------------ #
     def list_groups(self, verification: Optional[str] = None) -> list[GroupSummary]:
+        if verification == "metadata_conflicts":
+            count = len(self._conflict_rows())
+            return [GroupSummary("__metadata__", "INI／OCR 衝突佇列", "automatic_only", "metadata", count)]
         rows = self.vehicles.list_vehicles(limit=100000)
         out: list[GroupSummary] = []
         for r in rows:
@@ -84,6 +97,8 @@ class ReviewModel:
         return out
 
     def group_summary(self, vehicle_id: str) -> Optional[GroupSummary]:
+        if vehicle_id == "__metadata__":
+            return self.list_groups("metadata_conflicts")[0]
         for g in self.list_groups():
             if g.vehicle_id == vehicle_id:
                 return g
@@ -91,7 +106,8 @@ class ReviewModel:
 
     def group_images(self, vehicle_id: str) -> list[GroupImage]:
         out: list[GroupImage] = []
-        for m in self.vehicles.members_for_review(vehicle_id):
+        rows = self._conflict_rows() if vehicle_id == "__metadata__" else self.vehicles.members_for_review(vehicle_id)
+        for m in rows:
             out.append(
                 GroupImage(
                     image_id=m["image_id"],
@@ -104,9 +120,24 @@ class ReviewModel:
                     camera_id=m.get("camera_id"),
                     date=m.get("date"),
                     confidence=m.get("confidence"),
+                    ini_plate_text=m.get("ini_plate_text"),
+                    ocr_plate_text=m.get("ocr_plate_text"),
+                    effective_plate_text=m.get("effective_plate_text"),
+                    plate_source=m.get("plate_source") or "unknown",
+                    plate_validation_status=m.get("plate_validation_status") or "unknown",
+                    ini_encoding=m.get("ini_encoding"),
+                    ini_parse_status=m.get("ini_parse_status") or "missing",
+                    metadata_conflict=bool(m.get("metadata_conflict")),
+                    conflict_type=m.get("conflict_type"),
                 )
             )
         return out
+
+    def _conflict_rows(self):
+        return [dict(row) for row in self.images.db.query(
+            "SELECT *, plate_text_raw AS effective_plate_text FROM images "
+            "WHERE metadata_conflict=1 OR plate_validation_status='OCR_MISMATCH' ORDER BY image_id"
+        )]
 
     # -- per-image review ------------------------------------------------ #
     def set_image_status(
@@ -118,7 +149,7 @@ class ReviewModel:
         note: Optional[str] = None,
     ) -> int:
         return self.reviews.upsert(
-            image_id, status, vehicle_id=vehicle_id, note=note
+            image_id, status, vehicle_id=None if vehicle_id == "__metadata__" else vehicle_id, note=note
         )
 
     def edit_image_plate(
@@ -136,13 +167,26 @@ class ReviewModel:
             raise ValueError("plate must contain at least one letter or digit")
         self.images.set_result_fields(
             image_id,
-            plate_text_normalized=plate,
-            plate_text_raw=new_plate.strip().upper(),
+            manual_plate_text=new_plate.strip().upper(),
+            plate_text_normalized=plate, plate_text_raw=new_plate.strip().upper(),
+            plate_source="manual", label_confidence=1.0, label_trust_level="HIGH",
+        )
+        details = self.images.get_details(image_id) or {}
+        resolved = MetadataResolver.resolve_plate(
+            manual_plate=new_plate, ini_plate=details.get("ini_plate_text"),
+            ocr_plate=details.get("ocr_plate_text"),
+            ocr_confidence=details.get("plate_confidence"),
+        )
+        self.images.set_result_fields(
+            image_id, plate_validation_status=resolved.validation_status,
+            metadata_conflict=int(resolved.conflict), conflict_type=resolved.conflict_type,
         )
         target = self.vehicles.get_or_create_for_plate(plate, source=GroupSource.MANUAL)
+        if current_vehicle == "__metadata__":
+            current_vehicle = self.vehicles.vehicle_for_image(image_id)
         if target != current_vehicle:
             self.vehicles.remove_member(current_vehicle, image_id)
-            self.vehicles.add_member(target, image_id, label_source="manual")
+        self.vehicles.add_member(target, image_id, label_source="manual")
         return target
 
     # -- group verification --------------------------------------------- #

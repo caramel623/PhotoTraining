@@ -20,6 +20,7 @@ from vehicle_dataset_manager.core.enums import ArchiveType
 log = logging.getLogger("vdm.archive")
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp"}
+INI_EXTS = {".ini"}
 ARCHIVE_EXTS = {".zip", ".7z", ".7zip"}
 
 ProgressCallback = Callable[[int, int, str], None]
@@ -94,6 +95,7 @@ class ArchiveEntry:
     is_dir: bool
     size: int
     is_image: bool = False
+    is_ini: bool = False
 
     @property
     def ext(self) -> str:
@@ -160,6 +162,7 @@ class ArchiveManager:
                         is_dir=is_dir,
                         size=0 if is_dir else int(info.file_size),
                         is_image=(not is_dir and ext in IMAGE_EXTS),
+                        is_ini=(not is_dir and ext in INI_EXTS),
                     )
                 )
                 if on_progress:
@@ -187,6 +190,7 @@ class ArchiveManager:
                         is_dir=is_dir,
                         size=0,
                         is_image=(not is_dir and ext in IMAGE_EXTS),
+                        is_ini=(not is_dir and ext in INI_EXTS),
                     )
                 )
                 if on_progress:
@@ -210,6 +214,8 @@ class ArchiveManager:
         if atype == ArchiveType.ZIP:
             return self._extract_zip(path, dest, on_progress, should_cancel)
         if atype == ArchiveType.SEVEN_Z:
+            for entry in self._list_7z(path, None, None):
+                self._safe_dest(dest, entry.path_in_archive)
             if backend == "cli" and self.sevenz_cli:
                 result = self._extract_7z_cli(path, dest, on_progress, should_cancel)
                 if result is not None:
@@ -279,6 +285,8 @@ class ArchiveManager:
         result = ExtractionResult(dest_dir=dest, backend="zipfile")
         with zipfile.ZipFile(path) as zf:
             infos = [i for i in zf.infolist()]
+            for info in infos:
+                self._safe_dest(dest, info.filename)
             total = len(infos)
             for i, info in enumerate(infos):
                 if should_cancel and should_cancel():
@@ -399,8 +407,13 @@ class ArchiveManager:
     @staticmethod
     def _safe_dest(dest: Path, name: str) -> Path:
         """Resolve a member path inside ``dest``, guarding against traversal."""
-        normalized = name.replace("\\", "/").lstrip("/")
+        normalized = name.replace("\\", "/")
+        if normalized.startswith("/") or ":" in normalized:
+            raise ValueError(f"Unsafe archive path: {name}")
         parts = [p for p in normalized.split("/") if p not in ("", ".")]
         if ".." in parts:
             raise ValueError(f"Unsafe archive path: {name}")
-        return dest.joinpath(*parts) if parts else dest
+        target = dest.joinpath(*parts) if parts else dest
+        if not target.resolve().is_relative_to(dest.resolve()):
+            raise ValueError(f"Unsafe archive path: {name}")
+        return target

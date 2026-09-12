@@ -1,3 +1,5 @@
+import sqlite3
+
 from vehicle_dataset_manager.database.repositories import (
     ImageRepository,
     JobRepository,
@@ -5,12 +7,37 @@ from vehicle_dataset_manager.database.repositories import (
     VehicleRepository,
 )
 from vehicle_dataset_manager.core.enums import GroupVerification, JobState, ReviewStatus
+from vehicle_dataset_manager.database import schema
 
 
 def test_schema_migrated(db):
-    assert db.migrate() == 4
+    assert db.migrate() == 5
     columns = {row["name"] for row in db.query("PRAGMA table_info(images)")}
     assert "vehicle_crop_bbox" in columns
+    assert {"ini_parser_version", "ini_plate_text", "manual_plate_text", "plate_source"} <= columns
+    tables = {row["name"] for row in db.query("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert {"archives", "archive_members", "image_sources", "import_jobs"} <= tables
+
+
+def test_schema_v4_database_upgrades_without_deleting_rows(tmp_path):
+    connection = sqlite3.connect(tmp_path / "v4.sqlite3")
+    try:
+        for migration in schema._MIGRATIONS[:4]:
+            for statement in migration:
+                connection.execute(statement)
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL, applied_at TEXT NOT NULL)"
+        )
+        connection.execute("INSERT INTO schema_version VALUES (4, 'old')")
+        connection.execute(
+            "INSERT INTO images (original_filename, source_path, processing_status, review_status, quality_flags, created_at, updated_at) VALUES ('old.jpg','C:/old.jpg','completed','unreviewed','[]','old','old')"
+        )
+        connection.commit()
+        assert schema.migrate(connection) == 5
+        assert connection.execute("SELECT COUNT(*) FROM images").fetchone()[0] == 1
+        assert connection.execute("SELECT plate_source FROM images").fetchone()[0] == "unknown"
+    finally:
+        connection.close()
 
 
 def test_image_dedup(db):

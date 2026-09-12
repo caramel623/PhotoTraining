@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -22,6 +23,7 @@ class Database:
     def __init__(self, db_path: Path | str) -> None:
         self.db_path = Path(db_path)
         self._lock = threading.RLock()
+        self._transaction_depth = 0
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(
             str(self.db_path), check_same_thread=False, timeout=30.0
@@ -60,7 +62,24 @@ class Database:
 
     def commit(self) -> None:
         with self._lock:
-            self._conn.commit()
+            if not self._transaction_depth:
+                self._conn.commit()
+
+    @contextmanager
+    def transaction(self):
+        """Serialize an atomic checkpoint, including repository writes."""
+        with self._lock:
+            name = f"checkpoint_{self._transaction_depth}"
+            self._conn.execute(f"SAVEPOINT {name}")
+            self._transaction_depth += 1
+            try:
+                yield
+            except BaseException:
+                self._conn.execute(f"ROLLBACK TO {name}")
+                raise
+            finally:
+                self._transaction_depth -= 1
+                self._conn.execute(f"RELEASE {name}")
 
     def query(self, sql: str, params: Iterable[Any] = ()) -> list[sqlite3.Row]:
         with self._lock:

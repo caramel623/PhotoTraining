@@ -6,6 +6,7 @@ dist/
 build/
 *.spec
 .pytest_cache/
+.pytest_tmp_*/
 .tmp/
 .mypy_cache/
 .ruff_cache/
@@ -24,6 +25,17 @@ paddlex_home/
 # Workspace with photos, crops, DB (machine-local, never commit)
 runs/
 workspace/
+/database/
+/cache/
+/archives/
+/extracted/
+/crops/
+/plates/
+/reid/
+/exports/
+/logs/
+/thumbs/
+/settings.json
 cuda-runtime/
 
 # Archives (photos) - keep out of git

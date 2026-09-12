@@ -1,38 +1,17 @@
-﻿Taiwan license plate detector model
+Taiwan license plate detector model
 
-Training
- dataset:
-Taiwan License Plate Recognition Re
-search (TLPRR)
+Training dataset: Taiwan License Plate Recognition Research (TLPRR)
 Creator: JackResearch0
-Source:
- https://universe.roboflow.com/jackresearch0/
-taiwan-license-plate-recognition-research-tlp
-rr
+Source: https://universe.roboflow.com/jackresearch0/taiwan-license-plate-recognition-research-tlprr
 License: CC BY 4.0
-License URL: https://cr
-eativecommons.org/licenses/by/4.0/
+License URL: https://creativecommons.org/licenses/by/4.0/
 
-The bundl
-ed ONNX weights were trained by this project 
-from version 7 of the
-dataset. The model is u
-sed only to locate license plate regions; OCR
- remains a
-separate step with mandatory human
- review.
+The bundled ONNX weights were trained by this project from version 7 of the
+dataset. The model is used only to locate license plate regions; OCR remains a
+separate step with mandatory human review.
 
 Modification status:
-The bundled mo
-dels/taiwan_plate_detector.onnx is not an unc
-hanged upstream
-model file. This project trai
-ned and exported the ONNX weights using versi
-on 7
-of the TLPRR material, so the weights ar
-e a modified / derived artifact.
-Attribution 
-does not imply endorsement by JackResearch0 o
-r Roboflow.
-
-
+The bundled models/taiwan_plate_detector.onnx is not an unchanged upstream
+model file. This project trained and exported the ONNX weights using version 7
+of the TLPRR material, so the weights are a modified / derived artifact.
+Attribution does not imply endorsement by JackResearch0 or Roboflow.
