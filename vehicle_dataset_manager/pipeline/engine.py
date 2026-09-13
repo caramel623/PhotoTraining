@@ -193,6 +193,10 @@ class ProcessingEngine:
             for stage in self.stages:
                 if stage.name == "grouping":
                     stored = self.images.get_details(image_id) or {}
+                    if "ORIGINAL_REPLACED" in json.loads(stored.get("quality_flags") or "[]") and self.db.query_one(
+                        "SELECT 1 FROM vehicle_members WHERE image_id=?", (image_id,)
+                    ):
+                        continue  # Original replacement preserves existing group decisions.
                     if stored.get("metadata_conflict") or stored.get("manual_plate_text"):
                         continue
                     if stored.get("ini_present"):

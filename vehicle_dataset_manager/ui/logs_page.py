@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import logging
+from collections import deque
+from threading import Lock
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer, Slot
 from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -22,7 +24,12 @@ class LogsPage(QWidget):
     def __init__(self, ctx: AppContext) -> None:
         super().__init__()
         self.ctx = ctx
+        self._pending = deque(maxlen=5000)
+        self._pending_lock = Lock()
         self._build_ui()
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._flush_logs)
+        self._timer.start(100)
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -50,14 +57,26 @@ class LogsPage(QWidget):
         app_logger = logging.getLogger(APP_NAME)
         for handler in app_logger.handlers:
             if hasattr(handler, "subscribe"):
-                handler.subscribe(self._on_log)
+                # Background callbacks touch Python data only, never Qt.
+                pending, lock = self._pending, self._pending_lock
+                def enqueue(levelno, name, message):
+                    with lock:
+                        pending.append((levelno, message))
+                handler.subscribe(enqueue)
+                self.destroyed.connect(lambda *_: handler.unsubscribe(enqueue))
                 break
 
-    def _on_log(self, levelno: int, name: str, message: str) -> None:
+    @Slot()
+    def _flush_logs(self) -> None:
+        with self._pending_lock:
+            records = [self._pending.popleft() for _ in range(min(250, len(self._pending)))]
         if self.source.currentIndex() != 0:
             return
-        level = logging.getLevelName(levelno)
-        self.view.appendPlainText(f"[{level}] {message}")
+        if not records:
+            return
+        self.view.appendPlainText("\n".join(
+            f"[{logging.getLevelName(levelno)}] {message}" for levelno, message in records
+        ))
         cursor = self.view.textCursor()
         cursor.movePosition(QTextCursor.End)
         self.view.setTextCursor(cursor)
@@ -73,5 +92,6 @@ class LogsPage(QWidget):
             3: self.ctx.workspace.log_error_path,
         }.get(idx)
         if path and path.exists():
-            self.view.setPlainText(path.read_text(encoding="utf-8", errors="replace"))
+            with path.open(encoding="utf-8", errors="replace") as stream:
+                self.view.setPlainText("".join(deque(stream, maxlen=5000)))
             self.view.moveCursor(QTextCursor.End)

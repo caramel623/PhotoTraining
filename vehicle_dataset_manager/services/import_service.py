@@ -5,6 +5,7 @@ import json
 import hashlib
 import logging
 import re
+import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -21,6 +22,7 @@ from vehicle_dataset_manager.services.plate import normalize_plate
 from vehicle_dataset_manager.services.ini_parser import INI_PARSER_VERSION, ini_sha256, parse_ini_bytes
 from vehicle_dataset_manager.services.metadata import FilenameMetadataParser
 from vehicle_dataset_manager.services.metadata_resolver import MetadataResolver
+from vehicle_dataset_manager.services.photo_health import check_photo, read_photo
 
 log = logging.getLogger("vdm.app")
 _YEAR_RE = re.compile(r"(20\d{2})")
@@ -31,6 +33,8 @@ class ImportMode(str, Enum):
     NORMAL = "normal"
     RESCAN_EXISTING = "rescan_existing"
     FORCE_METADATA = "force_metadata"
+    REPAIR_PHOTOS = "repair_photos"
+    REPLACE_ORIGINALS = "replace_originals"
 
 
 @dataclass
@@ -60,6 +64,7 @@ class ImportResult:
     archive_unchanged: bool = False
     cancelled: bool = False
     parser_changed: bool = False
+    photos_repaired: int = 0
 
 
 def detect_year(name: str, provided: Optional[int] = None) -> Optional[int]:
@@ -86,6 +91,8 @@ class ImportService:
     ) -> ImportResult:
         archive_path = Path(archive_path).resolve()
         mode = ImportMode(mode)
+        if mode == ImportMode.REPLACE_ORIGINALS:
+            raise ValueError("原圖替換需要先預覽並確認，請使用匯入頁的原圖替換模式。")
         atype = detect_archive_type(archive_path)
         if atype not in (ArchiveType.ZIP, ArchiveType.SEVEN_Z):
             raise ValueError(f"Unsupported archive type: {archive_path}")
@@ -93,6 +100,8 @@ class ImportService:
         archive_hash = _sha256_file(archive_path)
         if not verify.ok:
             raise ValueError(f"Archive verification failed: {archive_path.name}")
+        if mode == ImportMode.REPAIR_PHOTOS:
+            return self._repair_photos(archive_path, archive_hash, archive_year, on_progress, should_cancel)
         archive_id, unchanged, parser_changed = self._register_archive(archive_path, archive_hash)
         audit_id = self._start_audit(archive_id, mode)
         year = detect_year(archive_path.name, archive_year)
@@ -124,6 +133,67 @@ class ImportService:
                 (_now(), str(exc), audit_id),
             )
             self.db.commit()
+            raise
+
+    def _repair_photos(self, archive_path, archive_hash, year, on_progress, should_cancel):
+        known = self.db.query_one("SELECT archive_id FROM archives WHERE sha256=? ORDER BY archive_id LIMIT 1", (archive_hash,))
+        if not known:
+            raise ValueError("此壓縮檔沒有相同 SHA256 的匯入紀錄，無法確認為原始壓縮檔；請勿以同檔名猜測覆蓋。")
+        audit_id = self._start_audit(int(known["archive_id"]), ImportMode.REPAIR_PHOTOS)
+        # Fresh, retained snapshot: never extract over a live photo or delete a
+        # damaged copy. Each successful DB checkpoint switches only its path.
+        dest = Path(tempfile.mkdtemp(prefix="repair-", dir=self.workspace.extracted_dir))
+        result = ImportResult(archive_path.name, year, dest, 0, 0, 0, True,
+                              mode=ImportMode.REPAIR_PHOTOS.value)
+        try:
+            extraction = self.archive_manager.extract_archives_recursively(
+                archive_path, dest, on_progress=on_progress, should_cancel=should_cancel)
+            result.cancelled = extraction.cancelled or bool(should_cancel and should_cancel())
+            result.errors = extraction.failed
+            if not result.cancelled and not result.errors:
+                candidates = {}
+                files = sorted(p for p in dest.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS)
+                result.images_found = len(files)
+                for index, path in enumerate(files, 1):
+                    if should_cancel and should_cancel():
+                        result.cancelled = True
+                        break
+                    try:
+                        _, digest = read_photo(path)
+                        candidates.setdefault(digest, path)
+                    except Exception:
+                        result.errors += 1
+                    if on_progress and (index % 25 == 0 or index == len(files)):
+                        on_progress(index, len(files), "驗證壓縮檔內照片")
+                if not result.cancelled:
+                    rows = self.db.query("SELECT image_id,source_path,sha256 FROM images WHERE sha256 IS NOT NULL")
+                    for index, row in enumerate(rows, 1):
+                        if should_cancel and should_cancel():
+                            result.cancelled = True
+                            break
+                        candidate = candidates.get(row["sha256"])
+                        if candidate is None:
+                            continue
+                        result.images_existing += 1
+                        if check_photo(row["source_path"], row["sha256"]) == "ok":
+                            continue
+                        with self.db.transaction():
+                            self.db.execute("UPDATE images SET source_path=? WHERE image_id=? AND sha256=?",
+                                            (str(candidate.resolve()), row["image_id"], row["sha256"]))
+                        result.photos_repaired += 1
+                        if on_progress:
+                            on_progress(index, len(rows), "替換已驗證的照片路徑")
+            result.message = (
+                f"修復 {result.photos_repaired} 張；匹配既有影像 {result.images_existing} 張。"
+                "僅更新照片路徑，保留標註與處理狀態；無 SHA256 或不匹配者不替換。"
+                f"原副本保留；新快照：{dest}"
+            )
+            self._finish_audit(audit_id, result, "cancelled" if result.cancelled else "failed" if result.errors else "completed")
+            return result
+        except Exception as exc:
+            result.errors += 1
+            result.message = str(exc)
+            self._finish_audit(audit_id, result, "failed")
             raise
 
     def _merge_extracted(

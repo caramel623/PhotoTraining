@@ -74,13 +74,20 @@ class JobRunner:
     def is_running(self) -> bool:
         return self._running
 
-    def start(self, fn: Callable, *args: Any) -> WorkerSignals:
+    def start(self, fn: Callable, *args: Any, on_finished=None, on_error=None, on_progress=None) -> WorkerSignals:
         if self.is_running:
             raise RuntimeError("a job is already running")
         self._worker = Worker(fn, *args)
         self.signals = self._worker.signals
         self.signals.finished.connect(self._job_finished)
         self.signals.error.connect(self._job_finished)
+        # Register receivers before scheduling even an immediately finishing job.
+        if on_finished is not None:
+            self.signals.finished.connect(on_finished)
+        if on_error is not None:
+            self.signals.error.connect(on_error)
+        if on_progress is not None:
+            self.signals.progress.connect(on_progress)
         self._running = True
         self.pool.start(self._worker)
         return self.signals

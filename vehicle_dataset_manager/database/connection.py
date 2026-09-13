@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from datetime import datetime
+from uuid import uuid4
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterable, Optional
@@ -48,6 +50,46 @@ class Database:
         self.close()
 
     # -- raw helpers -----------------------------------------------------
+    def backup_and_clear(self) -> Path:
+        """Back up a quiescent DB, then atomically clear known application data.
+
+        Keep schema and monotonically increasing IDs to avoid stale UI IDs
+        targeting a later import. Files outside this database are untouched.
+        """
+        tables = (
+            "ini_sources", "image_sources", "archive_members", "import_jobs",
+            "reviews", "vehicle_members", "plates", "detections", "ocr_results",
+            "duplicates", "processing_jobs", "dataset_exports", "images",
+            "vehicles", "archives",
+        )
+        with self._lock:
+            if self._transaction_depth or self._conn.in_transaction:
+                raise RuntimeError("資料庫仍有未完成交易，請等目前工作完成。")
+            actual = {row[0] for row in self._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            )}
+            if actual != set(tables) | {"schema_version"}:
+                raise RuntimeError("資料庫結構與預期不符，已取消清除以保護資料。")
+            folder = self.db_path.resolve().parent / "backups"
+            folder.mkdir(exist_ok=True)
+            backup = folder / f"before-clear-{datetime.now():%Y%m%d-%H%M%S}-{uuid4().hex}.sqlite3"
+            partial = backup.with_suffix(".partial")
+            # Exclusive creation ensures an existing backup is never overwritten.
+            with partial.open("xb"):
+                pass
+            target = sqlite3.connect(partial)
+            try:
+                self._conn.backup(target)
+                if target.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                    raise RuntimeError("資料庫備份驗證失敗，未清除資料。")
+            finally:
+                target.close()
+            partial.rename(backup)
+            with self.transaction():
+                for table in tables:
+                    self._conn.execute(f'DELETE FROM "{table}"')
+            return backup
+
     @property
     def conn(self) -> sqlite3.Connection:
         return self._conn

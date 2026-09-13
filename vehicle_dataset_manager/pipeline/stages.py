@@ -12,7 +12,6 @@ loads, hashes, and parses metadata while remaining fully resumable.
 """
 from __future__ import annotations
 
-import hashlib
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -27,6 +26,7 @@ from vehicle_dataset_manager.detection.base import BaseDetector, Detection
 from vehicle_dataset_manager.ocr.base import BaseOcr
 from vehicle_dataset_manager.ocr.paddle_client import PaddleOcrError
 from vehicle_dataset_manager.services.metadata import FilenameMetadataParser, IniSidecarParser
+from vehicle_dataset_manager.services.photo_health import read_photo
 from vehicle_dataset_manager.services.plate import (
     is_plausible_plate,
     normalize_plate,
@@ -75,16 +75,14 @@ class LoadImageStage(Stage):
     name = "load"
 
     def run(self, ctx: PipelineContext) -> None:
-        if not ctx.path.exists():
-            raise StageError(f"image file not found: {ctx.path}")
-        img = cv2.imread(str(ctx.path), cv2.IMREAD_COLOR)
-        if img is None:
-            raise StageError(f"failed to decode image: {ctx.path}")
+        try:
+            img, digest = read_photo(ctx.path)
+        except (OSError, ValueError, cv2.error) as exc:
+            raise StageError(f"image read failed ({exc}): {ctx.path}") from exc
         ctx.bgr = img
         h, w = img.shape[:2]
         ctx.height, ctx.width = int(h), int(w)
-        with open(ctx.path, "rb") as fh:
-            ctx.sha256 = hashlib.sha256(fh.read()).hexdigest()
+        ctx.sha256 = digest
         if ctx.width < 64 or ctx.height < 64:
             ctx.quality_flags.append("LOW_RESOLUTION")
 

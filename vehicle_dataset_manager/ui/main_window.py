@@ -35,7 +35,7 @@ class MainWindow(QMainWindow):
         self.export_page = ExportPage(ctx, runner)
         self.settings_page = SettingsPage(ctx)
         self.logs_page = LogsPage(ctx)
-        self.project_page = ProjectPage(ctx)
+        self.project_page = ProjectPage(ctx, runner)
 
         self.tabs.addTab(self.import_page, "匯入")
         self.tabs.addTab(self.processing_page, "影像處理")
@@ -57,6 +57,16 @@ class MainWindow(QMainWindow):
         self.import_page.refresh_requested.connect(self._update_status)
         self.processing_page.refresh_requested.connect(self._update_status)
         self.processing_page.refresh_requested.connect(self.review_page.refresh_groups)
+        self.project_page.reset_started.connect(lambda: self.tabs.setEnabled(False))
+        self.project_page.reset_finished.connect(lambda: self.tabs.setEnabled(True))
+        self.project_page.database_cleared.connect(self._database_cleared)
+
+    def _database_cleared(self):
+        self.import_page._clear()
+        self.processing_page.refresh()
+        self.review_page.refresh_groups()
+        self.vehicle_group_page.refresh()
+        self._update_status()
 
     def _refresh_visible_page(self, index: int) -> None:
         page = self.tabs.widget(index)
@@ -75,6 +85,9 @@ class MainWindow(QMainWindow):
         )
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if not self.tabs.isEnabled():
+            event.ignore()  # Do not close SQLite during backup/reset.
+            return
         try:
             if self.runner.is_running:
                 self.runner.stop()

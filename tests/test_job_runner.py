@@ -30,3 +30,16 @@ def test_job_runner_tracks_state_without_qrunnable_is_running():
     assert runner.is_running
     second.error.emit("expected")
     assert not runner.is_running
+
+
+def test_completion_connected_before_immediate_worker():
+    app = QApplication.instance() or QApplication([])
+    class ImmediatePool:
+        def start(self, worker):
+            worker.run()
+    runner = JobRunner()
+    runner.pool = ImmediatePool()
+    received = []
+    runner.start(lambda progress, cancel: 42, on_finished=received.append)
+    assert received == [42]
+    assert not runner.is_running
