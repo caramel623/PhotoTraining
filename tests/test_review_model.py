@@ -1,5 +1,6 @@
 ﻿from pathlib import Path
 
+import pytest
 from vehicle_dataset_manager.core.enums import GroupSource, GroupVerification, ReviewStatus
 from vehicle_dataset_manager.database.repositories import (
     ImageRepository,
@@ -142,6 +143,32 @@ def test_confirm_group(db):
     vid, ids = _seed_group(db)
     assert _model(db).confirm_group(vid) == GroupVerification.VERIFIED
     assert VehicleRepository(db).get(vid)["verification"] == "verified"
+    assert all(ImageRepository(db).get(i).review_status == ReviewStatus.VERIFIED_SAME.value for i in ids)
+
+
+def test_confirmed_group_allows_single_image_correction(db):
+    vid, ids = _seed_group(db)
+    model = _model(db)
+    model.confirm_group(vid)
+    model.set_image_status(ids[0], ReviewStatus.VERIFIED_NOT_SAME, vehicle_id=vid)
+    assert model.sync_verification(vid) == GroupVerification.PARTIALLY_VERIFIED
+    assert ImageRepository(db).get(ids[0]).review_status == ReviewStatus.VERIFIED_NOT_SAME.value
+    assert all(ImageRepository(db).get(i).review_status == ReviewStatus.VERIFIED_SAME.value for i in ids[1:])
+
+
+def test_group_confirmation_rolls_back_on_failure(db, monkeypatch):
+    vid, ids = _seed_group(db)
+    model = _model(db)
+    original = model.reviews.upsert
+    def fail_second(image_id, *args, **kwargs):
+        if image_id == ids[1]:
+            raise RuntimeError("test failure")
+        return original(image_id, *args, **kwargs)
+    monkeypatch.setattr(model.reviews, "upsert", fail_second)
+    with pytest.raises(RuntimeError):
+        model.confirm_group(vid)
+    assert all(ImageRepository(db).get(i).review_status == "unreviewed" for i in ids)
+    assert model.vehicles.get(vid)["verification"] == "automatic_only"
 
 
 def test_sync_verification_persists_suggested_state(db):

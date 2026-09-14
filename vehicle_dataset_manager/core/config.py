@@ -96,6 +96,7 @@ class ReIDConfig(BaseModel):
 
 
 class AppSettings(BaseModel):
+    review_web_port: int = Field(default=8080, ge=1024, le=65535)
     paths: PathsConfig = Field(default_factory=PathsConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)

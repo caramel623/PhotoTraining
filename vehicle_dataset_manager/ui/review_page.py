@@ -231,7 +231,7 @@ class ReviewPage(QWidget):
         self.btn_refresh.clicked.connect(self.refresh_groups)
         self.group_list.currentItemChanged.connect(self._on_group_changed)
         self.image_list.currentItemChanged.connect(self._on_image_changed)
-        self.image_list.itemClicked.connect(self._preview_image)
+        self.image_list.itemDoubleClicked.connect(self._preview_image)
         self.btn_same.clicked.connect(
             lambda: self._apply_status(ReviewStatus.VERIFIED_SAME)
         )

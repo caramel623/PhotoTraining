@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QMainWindow, QStatusBar, QTabWidget
+from PySide6.QtWidgets import QMainWindow, QStatusBar, QTabWidget, QMessageBox
 
 from vehicle_dataset_manager.app_context import AppContext
 from vehicle_dataset_manager.ui.export_page import ExportPage
@@ -15,6 +15,8 @@ from vehicle_dataset_manager.ui.project_page import ProjectPage
 from vehicle_dataset_manager.ui.review_page import ReviewPage
 from vehicle_dataset_manager.ui.settings_page import SettingsPage
 from vehicle_dataset_manager.ui.vehicle_group_page import VehicleGroupPage
+from vehicle_dataset_manager.ui.web_review import WebReview
+from vehicle_dataset_manager.ui.update_panel import UpdatePanel
 
 
 class MainWindow(QMainWindow):
@@ -36,6 +38,12 @@ class MainWindow(QMainWindow):
         self.settings_page = SettingsPage(ctx)
         self.logs_page = LogsPage(ctx)
         self.project_page = ProjectPage(ctx, runner)
+        self.web_review = WebReview(ctx, self._web_busy, self)
+        self.settings_page.btn_web.clicked.connect(self._toggle_web)
+        self.update_panel = UpdatePanel(ctx, self._update_busy, self.project_page)
+        self.project_page.layout().addWidget(self.update_panel)
+        self.update_panel.busy_changed.connect(lambda busy: self.tabs.setEnabled(not busy))
+        self.update_panel.exit_ready.connect(self.close)
 
         self.tabs.addTab(self.import_page, "匯入")
         self.tabs.addTab(self.processing_page, "影像處理")
@@ -60,6 +68,32 @@ class MainWindow(QMainWindow):
         self.project_page.reset_started.connect(lambda: self.tabs.setEnabled(False))
         self.project_page.reset_finished.connect(lambda: self.tabs.setEnabled(True))
         self.project_page.database_cleared.connect(self._database_cleared)
+
+    def _web_busy(self):
+        return self.runner.is_running or not self.tabs.isEnabled()
+
+    def _update_busy(self):
+        worker = self.settings_page._worker
+        return self._web_busy() or bool(worker is not None and worker.isRunning())
+
+    def _toggle_web(self):
+        if self.web_review.server:
+            self.web_review.stop()
+            self.settings_page.btn_web.setText("啟動區網覆核")
+            self.settings_page.web_status.setText("區網覆核已停止，原存取碼已失效。")
+            return
+        try:
+            port = self.web_review.start(self.settings_page.web_port.value())
+        except OSError as exc:
+            QMessageBox.warning(self, "無法啟動區網覆核", f"連接埠可能已被占用：{exc}")
+            return
+        self.settings_page.btn_web.setText("停止區網覆核")
+        self.settings_page.web_status.setText(
+            f"本機：http://127.0.0.1:{port}/\n區網：http://本機區網IP:{port}/\n"
+            f"存取碼：{self.web_review.token}\n"
+            "請只允許 Windows 防火牆私人網路存取。HTTP 不加密，僅限可信任區網。"
+        )
+        self.settings_page.web_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
     def _database_cleared(self):
         self.import_page._clear()
@@ -93,6 +127,7 @@ class MainWindow(QMainWindow):
                 self.runner.stop()
         except Exception:  # noqa: BLE001
             pass
+        self.web_review.stop()
         try:
             self.ctx.close()
         except Exception:  # noqa: BLE001

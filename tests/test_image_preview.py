@@ -41,7 +41,7 @@ def test_missing_photo_preview_is_dismissible(workspace):
     assert not preview.isVisible()
 
 
-def test_click_opens_preview_without_changing_review(db, workspace, monkeypatch):
+def test_only_double_click_opens_preview_without_changing_review(db, workspace, monkeypatch):
     app = _app()
     ctx, group, ids = _seed_page(db, workspace)
     page = ReviewPage(ctx)
@@ -51,6 +51,8 @@ def test_click_opens_preview_without_changing_review(db, workspace, monkeypatch)
         return 0
     monkeypatch.setattr(ImagePreview, "exec", inspect)
     page.image_list.itemClicked.emit(page.image_list.item(0))
+    assert opened == []
+    page.image_list.itemDoubleClicked.emit(page.image_list.item(0))
     assert opened == [True]
     assert all(ctx.images.get(i).review_status == "unreviewed" for i in ids)
     page.close()

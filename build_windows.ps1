@@ -111,6 +111,10 @@ if (-not $OneFile) {
 }
 
 Write-Host ""
+if (-not $OneFile) {
+    & $py scripts/write_update_manifest.py (Join-Path $root "dist\VehicleDatasetManager")
+    if ($LASTEXITCODE -ne 0) { throw "Update manifest failed" }
+}
 Write-Host "Build complete." -ForegroundColor Green
 if ($OneFile) {
     Write-Host "  dist\VehicleDatasetManager.exe"

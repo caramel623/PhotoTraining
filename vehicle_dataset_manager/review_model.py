@@ -210,8 +210,14 @@ class ReviewModel:
         )
 
     def confirm_group(self, vehicle_id: str) -> GroupVerification:
-        """Explicit human confirmation -> verified (highest label priority)."""
-        self.vehicles.set_verification(vehicle_id, GroupVerification.VERIFIED)
+        """Confirm every member atomically; individual reviews remain editable."""
+        with self.images.db.transaction():
+            for member in self.vehicles.members_for_review(vehicle_id):
+                self.set_image_status(
+                    member["image_id"], ReviewStatus.VERIFIED_SAME,
+                    vehicle_id=vehicle_id,
+                )
+            self.vehicles.set_verification(vehicle_id, GroupVerification.VERIFIED)
         return GroupVerification.VERIFIED
 
     def sync_verification(self, vehicle_id: str) -> GroupVerification:

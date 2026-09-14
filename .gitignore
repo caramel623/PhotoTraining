@@ -37,6 +37,7 @@ workspace/
 /thumbs/
 /settings.json
 cuda-runtime/
+.updates/
 
 # Archives (photos) - keep out of git
 *.7z

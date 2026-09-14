@@ -139,6 +139,19 @@ class SettingsPage(QWidget):
         self.scroll_area.setWidget(scroll_content)
         root.addWidget(self.scroll_area, 1)
 
+        web_group = QGroupBox("區網人工覆核（Web GUI）")
+        web_layout = QFormLayout(web_group)
+        self.web_port = QSpinBox()
+        self.web_port.setRange(1024, 65535)
+        self.web_port.setValue(self.ctx.settings.review_web_port)
+        self.btn_web = QPushButton("啟動區網覆核")
+        self.web_status = QLabel("尚未啟動。僅限可信任區網，請勿將連接埠轉發至網際網路。")
+        self.web_status.setWordWrap(True)
+        web_layout.addRow("連接埠（儲存後於下次啟動生效）", self.web_port)
+        web_layout.addRow(self.btn_web)
+        web_layout.addRow(self.web_status)
+        content_layout.addWidget(web_group)
+
         dependencies = QGroupBox("依賴與模型")
         dep_layout = QVBoxLayout(dependencies)
         dep_note = QLabel(
@@ -329,6 +342,7 @@ class SettingsPage(QWidget):
 
     def _save(self) -> None:
         s = self.ctx.settings
+        s.review_web_port = self.web_port.value()
         s.paths.workspace = self.workspace_edit.text().strip() or None
         s.paths.archive_dir = self.archive_dir.text().strip() or None
         s.paths.output_dir = self.output_dir.text().strip() or None
