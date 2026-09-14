@@ -14,4 +14,4 @@ from vehicle_dataset_manager.core.portable_runtime import (
 _activate_portable_cuda_runtime()
 del _activate_portable_cuda_runtime
 
-__version__ = "0.0.8"
+__version__ = "0.0.9"

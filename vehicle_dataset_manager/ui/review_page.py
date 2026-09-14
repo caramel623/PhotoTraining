@@ -22,6 +22,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QHBoxLayout,
     QInputDialog,
@@ -41,6 +42,7 @@ from vehicle_dataset_manager.app_context import AppContext
 from vehicle_dataset_manager.core.enums import ReviewStatus
 from vehicle_dataset_manager.review_model import GroupImage, ReviewModel
 from vehicle_dataset_manager.ui.i18n import display_value
+from vehicle_dataset_manager.ui.image_preview import ImagePreview
 
 
 GROUP_ROLE = int(Qt.ItemDataRole.UserRole)
@@ -148,7 +150,7 @@ class ReviewPage(QWidget):
         toolbar.addWidget(self.btn_refresh)
         toolbar.addStretch(1)
         self.help_label = QLabel(
-            "Enter＝同一車輛  Space＝下一張  N＝不同車輛  U＝不確定  "
+            "Enter＝確認整組並前往下一組  Space＝下一張  N＝不同車輛  U＝不確定  "
             "X＝排除  E＝修改車牌  M＝合併  S＝拆分"
         )
         self.help_label.setStyleSheet("color: #666;")
@@ -172,7 +174,7 @@ class ReviewPage(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         summary_row.addWidget(self.summary_label, 1)
-        self.btn_confirm = QPushButton("確認整個群組")
+        self.btn_confirm = QPushButton("確認整個群組（Enter）")
         self.btn_merge = QPushButton("合併…")
         self.btn_split = QPushButton("拆分選取影像…")
         self.btn_edit = QPushButton("修改車牌…")
@@ -229,6 +231,7 @@ class ReviewPage(QWidget):
         self.btn_refresh.clicked.connect(self.refresh_groups)
         self.group_list.currentItemChanged.connect(self._on_group_changed)
         self.image_list.currentItemChanged.connect(self._on_image_changed)
+        self.image_list.itemClicked.connect(self._preview_image)
         self.btn_same.clicked.connect(
             lambda: self._apply_status(ReviewStatus.VERIFIED_SAME)
         )
@@ -249,8 +252,8 @@ class ReviewPage(QWidget):
 
     def _install_shortcuts(self) -> None:
         bindings = (
-            ("Return", lambda: self._apply_status(ReviewStatus.VERIFIED_SAME)),
-            ("Enter", lambda: self._apply_status(ReviewStatus.VERIFIED_SAME)),
+            ("Return", self._confirm_group),
+            ("Enter", self._confirm_group),
             ("Space", self._next_image),
             ("N", lambda: self._apply_status(ReviewStatus.VERIFIED_NOT_SAME)),
             ("U", lambda: self._apply_status(ReviewStatus.UNCERTAIN)),
@@ -262,6 +265,8 @@ class ReviewPage(QWidget):
         for key, slot in bindings:
             shortcut = QShortcut(QKeySequence(key), self)
             shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            if key in ("Return", "Enter"):
+                shortcut.setAutoRepeat(False)
             shortcut.activated.connect(slot)
             self._shortcuts.append(shortcut)
 
@@ -376,6 +381,17 @@ class ReviewPage(QWidget):
         if item is not None:
             item.setIcon(QIcon(QPixmap.fromImage(image)))
 
+    def _preview_image(self, item):
+        if QApplication.keyboardModifiers() & (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
+            return  # Preserve Ctrl/Shift multi-selection.
+        image_id = item.data(IMAGE_ROLE)
+        image = next((row for row in self._images if row.image_id == image_id), None)
+        if image is None:
+            return
+        preview = ImagePreview(image.display_path or "", self.window())
+        preview.exec()
+        preview.deleteLater()
+
     def _on_image_changed(
         self, current: Optional[QListWidgetItem], _previous: Optional[QListWidgetItem]
     ) -> None:
@@ -434,14 +450,19 @@ class ReviewPage(QWidget):
         vehicle_id = self._selection.vehicle_id
         if not vehicle_id or vehicle_id == "__metadata__":
             return
-        if QMessageBox.question(
-            self,
-            "確認車輛群組",
-            "要將整個群組標記為已經人工確認嗎？",
-        ) != QMessageBox.StandardButton.Yes:
-            return
+        # Preserve visible ordering before confirmation changes filter membership.
+        order = [self.group_list.item(i).data(GROUP_ROLE) for i in range(self.group_list.count())]
+        position = order.index(vehicle_id) if vehicle_id in order else -1
+        following = order[position + 1:] + order[:max(position, 0)]
         self.model.confirm_group(vehicle_id)
-        self.refresh_groups(select_vehicle=vehicle_id)
+        pending = {
+            group.vehicle_id for group in self.model.list_groups(verification=self.group_filter.currentData())
+            if group.vehicle_id != "__metadata__" and group.verification != "verified"
+        }
+        next_id = next((candidate for candidate in following if candidate in pending), None)
+        self.refresh_groups(select_vehicle=next_id or vehicle_id)
+        if next_id is None:
+            self.summary_label.setText("群組確認完成：目前篩選下已沒有其他待檢核群組。")
 
     def _edit_plate(self) -> None:
         vehicle_id = self._selection.vehicle_id

@@ -1,5 +1,7 @@
 # 交接手冊 — Phase 2.5（CUDA）＋ Phase 3（PaddleOCR 車牌）
 
+> 2026-09-14 最新：[v0.0.9 人工檢核跳組、Enter 與放大預覽](HANDOFF_2026-09-14_REVIEW.md)，已編譯並驗證本機 EXE，218 項測試通過。
+
 > 最新：[v0.0.8 原圖替換與本機 EXE 交付](HANDOFF_2026-09-13_v008.md)，211 項測試通過；本機已編譯，未發布 GitHub。
 
 > 最新工作請先讀 [Qt 閃退與照片掃描修復（尚未發布）](HANDOFF_2026-09-12_CRASH_PHOTO_REPAIR.md)，再讀 [v0.0.7 CUDA 安裝器修正](HANDOFF_2026-09-12_CUDA_INSTALLER.md) 與 [v0.0.6 INI 交接](HANDOFF_2026-09-12_INI.md)；本文以下為歷史紀錄。
