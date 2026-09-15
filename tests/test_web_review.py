@@ -84,6 +84,20 @@ def test_web_confirm_then_correct_and_reject_stale(db, workspace):
     assert ctx.vehicles.get(group)["verification"] == "partially_verified"
 
 
+def test_web_confirm_preserves_different_vehicle(db, workspace):
+    ctx, group, ids = _seed_page(db, workspace)
+    api = ReviewAPI(ctx, lambda: False)
+    data = api.handle({"action": "images", "vehicle": group})
+    api.handle({"action": "status", "vehicle": group, "image": ids[0],
+                "revision": data["revision"], "status": "verified_not_same_vehicle"})
+    for _ in range(2):
+        data = api.handle({"action": "images", "vehicle": group})
+        api.handle({"action": "confirm", "vehicle": group, "revision": data["revision"]})
+        assert ctx.images.get(ids[0]).review_status == "verified_not_same_vehicle"
+        assert ctx.images.get(ids[1]).review_status == "verified_same_vehicle"
+        assert ctx.vehicles.get(group)["verification"] == "partially_verified"
+
+
 def test_web_busy_rejects_actions(db, workspace):
     ctx, _, _ = _seed_page(db, workspace)
     with pytest.raises(ValueError, match="稍後"):

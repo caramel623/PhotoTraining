@@ -210,15 +210,17 @@ class ReviewModel:
         )
 
     def confirm_group(self, vehicle_id: str) -> GroupVerification:
-        """Confirm every member atomically; individual reviews remain editable."""
+        """Confirm only unreviewed members; preserve explicit individual decisions."""
         with self.images.db.transaction():
             for member in self.vehicles.members_for_review(vehicle_id):
+                if (member.get("review_status") or ReviewStatus.UNREVIEWED.value) != ReviewStatus.UNREVIEWED.value:
+                    continue
                 self.set_image_status(
                     member["image_id"], ReviewStatus.VERIFIED_SAME,
                     vehicle_id=vehicle_id,
                 )
-            self.vehicles.set_verification(vehicle_id, GroupVerification.VERIFIED)
-        return GroupVerification.VERIFIED
+            verification = self.sync_verification(vehicle_id)
+        return verification
 
     def sync_verification(self, vehicle_id: str) -> GroupVerification:
         """Persist the group state implied by its current per-image reviews."""

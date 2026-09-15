@@ -146,6 +146,20 @@ def test_confirm_group(db):
     assert all(ImageRepository(db).get(i).review_status == ReviewStatus.VERIFIED_SAME.value for i in ids)
 
 
+@pytest.mark.parametrize("status", [ReviewStatus.VERIFIED_NOT_SAME, ReviewStatus.UNCERTAIN, ReviewStatus.EXCLUDED])
+def test_confirm_preserves_explicit_decisions(db, status):
+    vid, ids = _seed_group(db)
+    model = _model(db)
+    model.set_image_status(ids[0], status, vehicle_id=vid, note="keep this decision")
+    for _ in range(2):
+        model.confirm_group(vid)
+        assert ImageRepository(db).get(ids[0]).review_status == status.value
+        assert all(ImageRepository(db).get(i).review_status == ReviewStatus.VERIFIED_SAME.value for i in ids[1:])
+        assert model.vehicles.get(vid)["verification"] == model.suggest_verification(vid).value
+    model.set_image_status(ids[0], ReviewStatus.VERIFIED_SAME, vehicle_id=vid)
+    assert model.sync_verification(vid) == GroupVerification.VERIFIED
+
+
 def test_confirmed_group_allows_single_image_correction(db):
     vid, ids = _seed_group(db)
     model = _model(db)

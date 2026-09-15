@@ -38,7 +38,7 @@ dialog::backdrop{background:#000b}dialog img{max-width:90vw;max-height:90vh;obje
 <div class="main-review">
 <header>
 <div class="group-heading"><span>目前覆核群組</span><h2 id="groupPlate">請選取群組</h2><div id="groupDetail"></div></div>
-<button id="reload">重新整理</button><button id="confirm">確認整組為同一車輛（Enter）</button>
+<button id="reload">重新整理</button><button id="confirm" title="只確認尚未覆核照片，保留不同車輛、不確定及已排除標記">確認剩餘未覆核為同一車輛（Enter）</button>
 <div><button id="prevImages">上一頁照片</button><span id="count"></span><button id="nextImages">下一頁照片</button></div>
 <div id="actions"><button data-status="verified_same_vehicle">同一車輛</button>
 <button data-status="verified_not_same_vehicle">不同車輛</button><button data-status="uncertain">不確定</button>

@@ -150,7 +150,7 @@ class ReviewPage(QWidget):
         toolbar.addWidget(self.btn_refresh)
         toolbar.addStretch(1)
         self.help_label = QLabel(
-            "Enter＝確認整組並前往下一組  Space＝下一張  N＝不同車輛  U＝不確定  "
+            "Enter＝確認剩餘未覆核並前往下一組  Space＝下一張  N＝不同車輛  U＝不確定  "
             "X＝排除  E＝修改車牌  M＝合併  S＝拆分"
         )
         self.help_label.setStyleSheet("color: #666;")
@@ -174,7 +174,8 @@ class ReviewPage(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         summary_row.addWidget(self.summary_label, 1)
-        self.btn_confirm = QPushButton("確認整個群組（Enter）")
+        self.btn_confirm = QPushButton("確認剩餘未覆核（Enter）")
+        self.btn_confirm.setToolTip("只將尚未覆核照片確認為同一車輛，保留不同車輛、不確定、已排除及既有註記。")
         self.btn_merge = QPushButton("合併…")
         self.btn_split = QPushButton("拆分選取影像…")
         self.btn_edit = QPushButton("修改車牌…")

@@ -16,6 +16,29 @@ def seed_groups(db, workspace):
     return ctx
 
 
+@pytest.mark.parametrize("trigger", ["button", "Return", "Enter"])
+def test_confirmation_preserves_different_and_advances(db, workspace, trigger):
+    from vehicle_dataset_manager.core.enums import ReviewStatus
+    app = _app()
+    ctx = seed_groups(db, workspace)
+    page = ReviewPage(ctx)
+    selected = page._selection.vehicle_id
+    ids = [image.image_id for image in page.model.group_images(selected)]
+    assert len(ids) == 2
+    page.model.set_image_status(ids[0], ReviewStatus.VERIFIED_NOT_SAME, vehicle_id=selected)
+    page.refresh_groups(select_vehicle=selected)
+    if trigger == "button":
+        page.btn_confirm.click()
+    else:
+        next(s for s in page.findChildren(QShortcut) if s.key().toString() == trigger).activated.emit()
+    assert ctx.images.get(ids[0]).review_status == "verified_not_same_vehicle"
+    assert ctx.images.get(ids[1]).review_status == "verified_same_vehicle"
+    assert ctx.vehicles.get(selected)["verification"] == "partially_verified"
+    assert page._selection.vehicle_id != selected
+    page.close()
+    page._thumb_pool.waitForDone(2000)
+
+
 def test_confirm_advances_skips_verified_and_wraps(db, workspace, monkeypatch):
     app = _app()
     page = ReviewPage(seed_groups(db, workspace))
