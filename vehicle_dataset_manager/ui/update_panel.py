@@ -8,7 +8,7 @@ import sys
 import time
 
 from PySide6.QtCore import QThread, QTimer, Signal, Slot
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QMessageBox
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QMessageBox, QProgressBar
 
 from vehicle_dataset_manager import __version__
 from vehicle_dataset_manager.services.app_update import check_updates, stage_release, MANIFEST, REPO_URL
@@ -17,6 +17,7 @@ from vehicle_dataset_manager.services.update_apply import launch_helper
 
 class _Task(QThread):
     result = Signal(object)
+    progress = Signal(str)
 
     def __init__(self, fn, parent):
         super().__init__(parent)
@@ -24,7 +25,7 @@ class _Task(QThread):
 
     def run(self):
         try:
-            self.result.emit(self.fn())
+            self.result.emit(self.fn(self.progress.emit))
         except Exception as exc:
             self.result.emit(exc)
 
@@ -58,6 +59,9 @@ class UpdatePanel(QWidget):
         self.timer = QTimer(self)
         self.timer.setInterval(100)
         self.timer.timeout.connect(self._poll_helper)
+        self.activity_timer = QTimer(self)
+        self.activity_timer.setInterval(1000)
+        self.activity_timer.timeout.connect(self._activity_tick)
         layout = QVBoxLayout(self)
         self.label = QLabel(f"目前版本：{__version__}\n更新來源：{REPO_URL}")
         self.label.setWordWrap(True)
@@ -67,6 +71,13 @@ class UpdatePanel(QWidget):
         layout.addWidget(self.label)
         layout.addWidget(self.check)
         layout.addWidget(self.install)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.hide()
+        self.status = QLabel()
+        self.status.setWordWrap(True)
+        layout.addWidget(self.progress_bar)
+        layout.addWidget(self.status)
         self.check.clicked.connect(self._check)
         self.install.clicked.connect(self._download)
 
@@ -79,6 +90,8 @@ class UpdatePanel(QWidget):
         self.install.setEnabled(False)
         self.busy_changed.emit(True)
         self.task = _Task(fn, self)
+        self.task.progress.connect(self._progress)
+        self._begin_activity("正在準備，請稍候…")
         # Deliver result after the QThread has finished, so closing the window
         # cannot destroy a running worker.
         self.pending = None
@@ -93,14 +106,39 @@ class UpdatePanel(QWidget):
 
     @Slot()
     def _finished(self):
+        self._end_activity()
         self.is_working = False
         self.busy_changed.emit(False)
         self.check.setEnabled(True)
         self.callback(self.pending)
 
+    def _begin_activity(self, message):
+        self.started_at = time.monotonic()
+        self.progress_bar.show()
+        self._progress(message)
+        self.activity_timer.start()
+
+    @Slot(str)
+    def _progress(self, message):
+        self.phase = message
+        self.last_activity = time.monotonic()
+        self._activity_tick()
+
+    def _activity_tick(self):
+        now = time.monotonic()
+        waiting = int(now - self.last_activity)
+        suffix = (f"\n此階段已有 {waiting} 秒沒有新進度；可能正在等待網路或磁碟，尚未確認失敗。"
+                  if waiting >= 15 else "")
+        self.status.setText(f"{self.phase}\n已經過 {int(now - self.started_at)} 秒" + suffix)
+
+    def _end_activity(self):
+        self.activity_timer.stop()
+        self.progress_bar.hide()
+        self.status.setText(f"本階段結束，共經過 {int(time.monotonic() - self.started_at)} 秒。")
+
     def _check(self):
         self.label.setText("正在檢查 GitHub…")
-        self._start(lambda: check_updates(__version__, local_commit()), self._checked)
+        self._start(lambda progress: check_updates(__version__, local_commit()), self._checked)
 
     def _checked(self, info):
         if isinstance(info, Exception) or not isinstance(info, dict):
@@ -126,7 +164,7 @@ class UpdatePanel(QWidget):
                 "\n照片、資料庫、設定、模型及 OCR／CUDA 環境都會保留。") != QMessageBox.Yes:
             return
         self.label.setText("正在下載並驗證更新套件，請稍候…")
-        self._start(lambda: stage_release(self.info, self.ctx.workspace.cache_dir / "app-updates"),
+        self._start(lambda progress: stage_release(self.info, self.ctx.workspace.cache_dir / "app-updates", progress),
                     self._downloaded)
 
     def _downloaded(self, staged):
@@ -141,29 +179,37 @@ class UpdatePanel(QWidget):
                 "舊程式會保留於程式資料夾的 .updates；失敗時嘗試回復。") != QMessageBox.Yes:
             self.label.setText("已取消套用；目前程式未變更。")
             return
-        try:
-            self.directory, self.helper = launch_helper(staged, Path(sys.executable).parent,
-                self.ctx.workspace.root, self.info["release"])
-        except Exception as exc:
-            self.label.setText(f"更新未啟動：{exc}")
+        self.label.setText("正在準備更新輔助程式；完成後將關閉主程式並自動重啟。")
+        self._start(lambda progress: launch_helper(staged, Path(sys.executable).parent,
+                    self.ctx.workspace.root, self.info["release"], progress), self._helper_started)
+
+    def _helper_started(self, result):
+        if isinstance(result, Exception):
+            self.label.setText(f"更新未啟動：{result}")
             return
+        self.directory, self.helper = result
         self.is_working = True
+        self.check.setEnabled(False)
         self.busy_changed.emit(True)
         self.label.setText("正在啟動並驗證更新輔助程式，請稍候…")
+        self._begin_activity("等待更新輔助程式就緒；主程式關閉後將替換檔案並自動重啟，請勿手動重開。")
         self.deadline = time.monotonic() + 90
         self.timer.start()
 
     def _poll_helper(self):
         if (self.directory / "ready").is_file() and self.helper.poll() is None:
             self.timer.stop()
+            self._end_activity()
             self.is_working = False
             self.busy_changed.emit(False)
             self.exit_ready.emit()
         elif self.helper.poll() is not None or time.monotonic() > self.deadline:
             self.timer.stop()
+            self._end_activity()
             if self.helper.poll() is None:
                 self.helper.terminate()  # Only our waiting, not-yet-authorized helper.
                 self.helper.wait(timeout=5)
             self.is_working = False
             self.busy_changed.emit(False)
             self.label.setText("更新輔助程式未就緒，未關閉或修改目前程式。")
+            self.check.setEnabled(True)

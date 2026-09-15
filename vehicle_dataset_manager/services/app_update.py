@@ -6,6 +6,7 @@ import json
 import re
 import stat
 import tempfile
+import time
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -97,7 +98,7 @@ def safe_member(name):
     return path
 
 
-def validate_payload(root, expected_version):
+def validate_payload(root, expected_version, progress=lambda message: None):
     manifest_path = root / MANIFEST
     if not manifest_path.is_file() or manifest_path.stat().st_size > 4 * 1024**2:
         raise ValueError("此套件不支援安全自動更新（缺少更新清單）")
@@ -110,7 +111,9 @@ def validate_payload(root, expected_version):
     actual = {p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()}
     if actual != set(files) | {MANIFEST}:
         raise ValueError("套件檔案與更新清單不符")
-    for name, digest in files.items():
+    for index, (name, digest) in enumerate(files.items(), 1):
+        if index == 1 or index % 50 == 0 or index == len(files):
+            progress(f"正在校驗程式檔案：{index} / {len(files)}")
         safe_member(name)
         path = root / name
         if path.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
@@ -122,7 +125,7 @@ def validate_payload(root, expected_version):
     return manifest
 
 
-def extract_release(archive, destination, expected_version):
+def extract_release(archive, destination, expected_version, progress=lambda message: None):
     destination = Path(destination)
     destination.mkdir(exist_ok=False)
     with zipfile.ZipFile(archive) as package:
@@ -142,9 +145,12 @@ def extract_release(archive, destination, expected_version):
             seen.add(name.casefold())
             if entry.flag_bits & 1:
                 raise ValueError("套件不得加密")
-        package.extractall(destination)
+        for index, entry in enumerate(entries, 1):
+            if index == 1 or index % 50 == 0 or index == len(entries):
+                progress(f"正在解壓縮：{index} / {len(entries)} 個檔案")
+            package.extract(entry, destination)
     root = destination / "VehicleDatasetManager"
-    validate_payload(root, expected_version)
+    validate_payload(root, expected_version, progress)
     return root
 
 
@@ -169,6 +175,7 @@ def stage_release(info, cache, progress=lambda message: None):
     archive = folder / "release.zip"
     request = urllib.request.Request(url, headers={"User-Agent": "VehicleDatasetManager-Updater"})
     progress("正在下載 Release 套件…")
+    started = last_report = time.monotonic()
     with urllib.request.urlopen(request, timeout=30) as response, archive.open("xb") as output:
         if not response.geturl().startswith("https://"):
             raise ValueError("拒絕不安全下載連線")
@@ -178,7 +185,16 @@ def stage_release(info, cache, progress=lambda message: None):
             if total > size:
                 raise ValueError("下載大小超過預期")
             output.write(chunk)
+            now = time.monotonic()
+            if now - last_report >= 0.25 or total == size:
+                speed = total / max(now - started, 0.001)
+                progress(f"正在下載：{total / 1024**2:.1f} / {size / 1024**2:.1f} MB"
+                         f"（{total / size:.0%}），平均 {speed / 1024**2:.1f} MB/s")
+                last_report = now
+    progress("正在校驗下載套件 SHA-256…")
     if total != size or sha256(archive) != digest[7:]:
         raise ValueError("下載檔案校驗失敗，未修改程式")
     progress("正在驗證並解壓程式檔案…")
-    return extract_release(archive, folder / "staged", tag)
+    root = extract_release(archive, folder / "staged", tag, progress)
+    progress("下載、解壓縮與校驗完成，等待確認套用更新。")
+    return root

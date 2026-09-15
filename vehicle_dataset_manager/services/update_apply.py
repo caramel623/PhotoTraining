@@ -116,13 +116,14 @@ def helper_main(request_path):
     return 0 if result["success"] else 1
 
 
-def launch_helper(staged, target, workspace, version):
+def launch_helper(staged, target, workspace, version, progress=lambda message: None):
     if os.name != "nt" or not getattr(sys, "frozen", False):
         raise ValueError("原始碼模式僅提供版本檢查；自動更新需使用 EXE")
     target = Path(target).resolve()
     if target != Path(sys.executable).resolve().parent:
         raise ValueError("只能更新目前執行的 EXE")
-    validate_payload(Path(staged), version)
+    progress("正在準備套用更新，重新校驗暫存檔案…")
+    validate_payload(Path(staged), version, progress)
     directory = target / ".updates" / ("request-" + uuid4().hex)
     directory.mkdir(parents=True, exist_ok=False)
     request = directory / "request.json"

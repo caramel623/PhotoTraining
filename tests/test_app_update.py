@@ -128,3 +128,64 @@ def test_independent_commit_failure_and_strict_asset():
     result = check_updates("0.0.9", fetch=fetch)
     assert result["new_release"] and result["asset"] and result["errors"]
 
+
+def test_stage_reports_download_extract_and_validation(tmp_path, monkeypatch):
+    import io
+    from vehicle_dataset_manager.services import app_update
+    source = payload(tmp_path / "source")
+    archive = tmp_path / "release.zip"
+    with zipfile.ZipFile(archive, "w") as package:
+        for path in source.rglob("*"):
+            if path.is_file():
+                package.write(path, "VehicleDatasetManager/" + path.relative_to(source).as_posix())
+    url = REPO_URL + "/releases/download/v0.0.10/VehicleDatasetManager-v0.0.10-windows-x64.zip"
+    class Response(io.BytesIO):
+        def geturl(self):
+            return url
+    monkeypatch.setattr(app_update.urllib.request, "urlopen",
+                        lambda *a, **k: Response(archive.read_bytes()))
+    messages = []
+    result = app_update.stage_release({
+        "new_release": True, "current_version": "0.0.9", "release": "v0.0.10",
+        "asset": {"browser_download_url": url, "size": archive.stat().st_size,
+                  "digest": "sha256:" + sha256(archive)},
+    }, tmp_path / "cache", messages.append)
+    assert (result / EXE).is_file()
+    assert any("100%" in m and "MB/s" in m for m in messages)
+    assert any("SHA-256" in m for m in messages)
+    assert any("解壓縮：" in m for m in messages)
+    assert any("校驗程式檔案：" in m for m in messages)
+    assert "等待確認" in messages[-1]
+
+
+def test_update_panel_progress_and_waiting_hint():
+    import time
+    from PySide6.QtWidgets import QApplication
+    from vehicle_dataset_manager.ui.update_panel import UpdatePanel
+    app = QApplication.instance() or QApplication([])
+    panel = UpdatePanel(None, lambda: False)
+    panel._begin_activity("正在下載")
+    panel.last_activity -= 16
+    panel._activity_tick()
+    assert "沒有新進度" in panel.status.text()
+    panel._progress("正在解壓縮：50 / 100 個檔案")
+    assert "50 / 100" in panel.status.text()
+    assert "沒有新進度" not in panel.status.text()
+    panel._end_activity()
+    assert not panel.activity_timer.isActive()
+    received = []
+    def work(progress):
+        progress("背景工作進度")
+        time.sleep(0.05)
+        return "done"
+    panel._start(work, received.append)
+    deadline = time.monotonic() + 5
+    while panel.is_working and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.005)
+    panel.task.wait(5000)
+    app.processEvents()
+    assert received == ["done"]
+    assert panel.phase == "背景工作進度"
+    assert not panel.activity_timer.isActive()
+    panel.close()
