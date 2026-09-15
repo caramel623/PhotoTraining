@@ -6,6 +6,7 @@ import json
 import mimetypes
 import secrets
 import threading
+import time
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -118,6 +119,8 @@ class WebReview(QObject):
         self.server = None
         self.thread = None
         self.token = ""
+        self._last_token = ""
+        self._session = None
         self.timer = QTimer(self)
         self.timer.setInterval(25)
         self.timer.timeout.connect(self._drain)
@@ -126,7 +129,13 @@ class WebReview(QObject):
         if self.server:
             raise ValueError("區網覆核已啟動")
         owner = self
-        token = secrets.token_urlsafe(24)
+        session = object()
+        token = f"{secrets.randbelow(1000000):06d}"
+        while token == self._last_token:
+            token = f"{secrets.randbelow(1000000):06d}"
+        auth_lock = threading.Lock()
+        failures = 0
+        blocked_until = 0.0
 
         class Handler(BaseHTTPRequestHandler):
             def setup(self):
@@ -140,6 +149,8 @@ class WebReview(QObject):
                 self.send_response(code)
                 self.send_header("Content-Type", mime)
                 self.send_header("Content-Length", str(len(body)))
+                if code == 429:
+                    self.send_header("Retry-After", "60")
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self.send_header("Referrer-Policy", "no-referrer")
@@ -156,11 +167,37 @@ class WebReview(QObject):
                 self.reply(200, "text/html; charset=utf-8", HTML.encode("utf-8"))
 
             def do_POST(self):
+                nonlocal failures, blocked_until
                 if self.path != "/api":
                     self.reply(404, "text/plain", b"Not found")
                     return
                 supplied = self.headers.get("X-Review-Token", "")
-                if not secrets.compare_digest(supplied.encode(), token.encode()):
+                # Consume a bounded body before an early authentication reply;
+                # closing Windows sockets with unread data can reset the reply.
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    if not 0 <= length <= 8192:
+                        raise ValueError("Request too large")
+                    body = self.rfile.read(length)
+                    if len(body) != length:
+                        raise ValueError("Incomplete request")
+                except (ValueError, OSError):
+                    self.reply(400, "text/plain", b"Invalid request")
+                    return
+                with auth_lock:
+                    now = time.monotonic()
+                    blocked = now < blocked_until
+                    if not blocked and blocked_until:
+                        failures, blocked_until = 0, 0.0
+                    valid = secrets.compare_digest(supplied.encode(), token.encode())
+                    if not blocked and not valid:
+                        failures += 1
+                        if failures >= 5:
+                            blocked_until = now + 60
+                if blocked:
+                    self.reply(429, "text/plain; charset=utf-8", "驗證碼錯誤次數過多，請等待 60 秒或在桌面停止後重新啟動。".encode())
+                    return
+                if not valid:
                     self.reply(401, "text/plain; charset=utf-8", "存取碼不正確".encode())
                     return
                 origin = self.headers.get("Origin")
@@ -168,15 +205,12 @@ class WebReview(QObject):
                     self.reply(403, "text/plain", b"Cross-origin request refused")
                     return
                 try:
-                    length = int(self.headers.get("Content-Length", "0"))
-                    if not 0 < length <= 8192:
-                        raise ValueError("Request too large")
-                    payload = json.loads(self.rfile.read(length))
+                    payload = json.loads(body)
                     if not isinstance(payload, dict):
                         raise ValueError("Invalid request")
                     result = Queue(maxsize=1)
                     cancelled = threading.Event()
-                    owner.queue.put_nowait((payload, result, cancelled, token))
+                    owner.queue.put_nowait((payload, result, cancelled, session))
                     try:
                         code, mime, body = result.get(timeout=15)
                     except Empty:
@@ -191,6 +225,8 @@ class WebReview(QObject):
         self.server = _BoundedServer((host, port), Handler)
         self.server.daemon_threads = True
         self.token = token
+        self._last_token = token
+        self._session = session
         self.thread = threading.Thread(target=self.server.serve_forever,
                                        kwargs={"poll_interval": 0.1}, daemon=True)
         self.thread.start()
@@ -203,7 +239,7 @@ class WebReview(QObject):
                 payload, result, cancelled, session = self.queue.get_nowait()
             except Empty:
                 break
-            if cancelled.is_set() or session != self.token:
+            if cancelled.is_set() or session is not self._session:
                 result.put((503, "text/plain", b"Session expired"))
                 continue
             try:
@@ -219,6 +255,7 @@ class WebReview(QObject):
                 result.put((500, "text/plain; charset=utf-8", "操作失敗，請查看桌面程式。".encode()))
 
     def stop(self):
+        self._session = None
         self.timer.stop()
         if self.server:
             self.server.shutdown()

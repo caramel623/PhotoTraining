@@ -90,7 +90,7 @@ class MainWindow(QMainWindow):
         self.settings_page.btn_web.setText("停止區網覆核")
         self.settings_page.web_status.setText(
             f"本機：http://127.0.0.1:{port}/\n區網：http://本機區網IP:{port}/\n"
-            f"存取碼：{self.web_review.token}\n"
+            f"驗證碼（6 位數字）：{self.web_review.token}\n停止後重新啟動會產生新碼。\n"
             "請只允許 Windows 防火牆私人網路存取。HTTP 不加密，僅限可信任區網。"
         )
         self.settings_page.web_status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)

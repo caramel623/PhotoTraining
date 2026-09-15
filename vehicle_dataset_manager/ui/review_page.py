@@ -322,7 +322,7 @@ class ReviewPage(QWidget):
         cameras = ", ".join(summary.cameras) or "-"
         years = ", ".join(map(str, summary.years)) or "-"
         self.summary_label.setText(
-            f"<b>{summary.plate_normalized or '（無車牌）'}</b> &nbsp; "
+            f"<b style='font-size:24px'>{summary.plate_normalized or '（無車牌）'}</b> &nbsp; "
             f"{summary.vehicle_id}<br>"
             f"{summary.image_count} 張影像 · 相機：{cameras} · 年份：{years} · "
             f"確認狀態：{display_value(summary.verification)}"

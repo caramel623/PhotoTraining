@@ -24,6 +24,49 @@ def test_web_defaults_and_port_validation():
         AppSettings(review_web_port=65536)
 
 
+def test_six_digit_code_rotates_on_restart(db, workspace, monkeypatch):
+    import vehicle_dataset_manager.ui.web_review as module
+    app = _app()
+    values = iter([7, 7, 812])
+    monkeypatch.setattr(module.secrets, "randbelow", lambda limit: next(values))
+    ctx, _, _ = _seed_page(db, workspace)
+    server = WebReview(ctx, lambda: False)
+    try:
+        server.start(0, "127.0.0.1")
+        assert server.token == "000007"
+        old_session = server._session
+        server.stop()
+        assert not server.token
+        port = server.start(0, "127.0.0.1")
+        assert server.token == "000812"
+        assert server._session is not old_session
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api",
+                data=b'{}', headers={"X-Review-Token": "000007"})
+        with pytest.raises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(req, timeout=3)
+        assert error.value.code == 401
+    finally:
+        server.stop()
+
+
+def test_code_guessing_is_throttled(db, workspace):
+    app = _app()
+    ctx, _, _ = _seed_page(db, workspace)
+    server = WebReview(ctx, lambda: False)
+    try:
+        port = server.start(0, "127.0.0.1")
+        for attempt in range(6):
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/api",
+                    data=b'{"action":"groups"}', headers={"X-Review-Token": "invalid"})
+            with pytest.raises(urllib.error.HTTPError) as error:
+                urllib.request.urlopen(req, timeout=3)
+            assert error.value.code == (401 if attempt < 5 else 429)
+            error.value.read()
+            error.value.close()
+    finally:
+        server.stop()
+
+
 def test_web_confirm_then_correct_and_reject_stale(db, workspace):
     ctx, group, ids = _seed_page(db, workspace)
     api = ReviewAPI(ctx, lambda: False)
